@@ -2,7 +2,7 @@
   "name": "paper-reader",
   "private": true,
   "scripts": {
-    "tauri": "tauri"
+    "tauri": "npx tauri"
   },
   "dependencies": {
     "playwright": "^1.60.0"
