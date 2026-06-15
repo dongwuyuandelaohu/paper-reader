@@ -4,12 +4,14 @@ block_cipher = None
 
 a = Analysis(
     ['main.py'],
-    pathex=[],
+    pathex=['.'],
     binaries=[],
     datas=[
         ('config', 'config'),
     ],
     hiddenimports=[
+        # uvicorn
+        'uvicorn',
         'uvicorn.logging',
         'uvicorn.loops',
         'uvicorn.loops.auto',
@@ -20,6 +22,53 @@ a = Analysis(
         'uvicorn.protocols.websockets.auto',
         'uvicorn.lifespan',
         'uvicorn.lifespan.on',
+        # fastapi
+        'fastapi',
+        'fastapi.middleware.cors',
+        'fastapi.staticfiles',
+        'fastapi.responses',
+        # aiosqlite
+        'aiosqlite',
+        # pydantic
+        'pydantic',
+        'pydantic.deprecated.decorator',
+        'pydantic.deprecated.json',
+        # multipart
+        'multipart',
+        'python_multipart',
+        # httpx
+        'httpx',
+        # anyio
+        'anyio',
+        'anyio._backends',
+        'anyio._backends._asyncio',
+        # config
+        'config',
+        'config.paths',
+        # services
+        'services',
+        'services.db',
+        'services.dependencies',
+        'services.engine_detector',
+        'services.engine_installer',
+        'services.ai',
+        # api
+        'api',
+        'api.papers',
+        'api.translate',
+        'api.conversations',
+        'api.models',
+        'api.settings',
+        'api.notes',
+        'api.glossary',
+        'api.system',
+        'api.parse',
+        'api.tags',
+        # engines
+        'engines',
+        'engines.pymupdf_engine',
+        # fitz (PyMuPDF)
+        'fitz',
     ],
     hookspath=[],
     hooksconfig={},
@@ -47,7 +96,7 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=False,
+    console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

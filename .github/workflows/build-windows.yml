@@ -41,14 +41,41 @@ jobs:
       working-directory: ./backend
     
     - name: Build backend executable
-      run: pyinstaller --name main --onefile --noconsole main.py
+      run: |
+        Write-Host "=== Starting PyInstaller build ==="
+        Write-Host "Current directory: $(Get-Location)"
+        Write-Host "Checking for spec file..."
+        if (Test-Path "main.spec") {
+            Write-Host "✓ Found main.spec"
+            pyinstaller main.spec --clean --noconfirm
+        } else {
+            Write-Host "✗ No spec file, using command line"
+            pyinstaller --name main --onefile main.py
+        }
+        Write-Host "=== PyInstaller build completed ==="
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "PyInstaller failed with exit code $LASTEXITCODE"
+            exit $LASTEXITCODE
+        }
       working-directory: ./backend
       shell: pwsh
     
     - name: List backend dist contents
       run: |
         Write-Host "=== backend/dist contents ==="
-        Get-ChildItem -Path "backend/dist" -Recurse -Depth 2 | Select-Object FullName
+        if (Test-Path "backend/dist") {
+            Get-ChildItem -Path "backend/dist" -Recurse | Select-Object FullName, Length
+        } else {
+            Write-Error "backend/dist directory does not exist!"
+            exit 1
+        }
+        Write-Host "=== Checking for main.exe ==="
+        if (Test-Path "backend/dist/main/main.exe") {
+            Write-Host "✓ Found backend/dist/main/main.exe"
+        } else {
+            Write-Error "backend/dist/main/main.exe not found!"
+            exit 1
+        }
       shell: pwsh
     
     - name: Copy backend to Tauri resources
