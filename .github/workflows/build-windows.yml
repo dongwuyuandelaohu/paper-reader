@@ -100,6 +100,10 @@ jobs:
         Copy-Item -Path "backend/dist/main.exe" -Destination "src-tauri/resources/backend/" -Force
       shell: pwsh
     
+    - name: Install root dependencies
+      run: npm install
+      shell: pwsh
+    
     - name: Build Tauri app
       uses: tauri-apps/tauri-action@v0
       env:
