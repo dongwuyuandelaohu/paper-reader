@@ -41,7 +41,7 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 
-fn start_backend<R: Runtime>(app: &tauri::AppHandle<R>, process: Arc<Mutex<Option<Child>>>) -> Result<(), Box<dyn std::error::Error>> {
+fn start_backend<R: Runtime>(app: &tauri::App<R>, process: Arc<Mutex<Option<Child>>>) -> Result<(), Box<dyn std::error::Error>> {
     // 获取应用资源目录
     let resource_dir = app.path().resource_dir()?;
     let backend_exe = resource_dir.join("backend").join("main.exe");
