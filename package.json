@@ -1,4 +1,9 @@
 {
+  "name": "paper-reader",
+  "private": true,
+  "scripts": {
+    "tauri": "tauri"
+  },
   "dependencies": {
     "playwright": "^1.60.0"
   },
