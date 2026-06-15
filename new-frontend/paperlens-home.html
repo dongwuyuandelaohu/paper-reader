@@ -1,0 +1,153 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PaperLens — 论文库</title>
+<style>
+  :root {
+    --bg: #f5f4ed; --surface: #faf9f5; --white: #ffffff; --sand: #e8e6dc;
+    --fg: #141413; --fg2: #4d4c48; --muted: #5e5d59; --stone: #87867f;
+    --dark: #3d3d3a; --silver: #b0aea5; --border: #f0eee6; --border2: #e8e6dc;
+    --dark-surface: #30302e; --deep: #141413;
+    --accent: #c96442; --coral: #d97757; --focus: #3898ec; --error: #b53333;
+    --ring: #d1cfc5; --ring-deep: #c2c0b6;
+    --success: #2d7a4f; --success-bg: #e8f5ee; --warn: #946b2d; --warn-bg: #fef3cd;
+    --font-serif: Georgia, 'Times New Roman', serif;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --font-mono: 'SF Mono', 'JetBrains Mono', 'Consolas', monospace;
+  }
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: var(--font-sans); background: var(--bg); color: var(--fg); -webkit-font-smoothing: antialiased; line-height: 1.6; overflow: hidden; height: 100vh; }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--ring); border-radius: 3px; }
+  .app { display: flex; height: 100vh; }
+  .sidebar { width: 240px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; padding: 20px 0; }
+  .sidebar-brand { padding: 0 20px 20px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+  .sidebar-logo { width: 32px; height: 32px; background: var(--accent); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--surface); font-family: var(--font-serif); font-weight: 500; font-size: 18px; }
+  .sidebar-name { font-family: var(--font-serif); font-size: 20px; font-weight: 500; color: var(--fg); }
+  .sidebar-nav { padding: 4px 8px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; font-size: 14px; color: var(--muted); cursor: pointer; border-radius: 8px; transition: background 0.15s, color 0.15s; border: none; background: none; width: 100%; text-align: left; font-family: var(--font-sans); }
+  .nav-item:hover { background: var(--sand); color: var(--fg2); }
+  .nav-item.active { background: var(--sand); color: var(--fg); font-weight: 500; }
+  .nav-item svg { width: 18px; height: 18px; flex-shrink: 0; }
+  .nav-count { margin-left: auto; font-size: 12px; color: var(--stone); font-variant-numeric: tabular-nums; }
+  .sidebar-divider { height: 1px; background: var(--border); margin: 12px 20px; }
+  .sidebar-label { padding: 4px 20px 8px; font-size: 11px; color: var(--stone); text-transform: uppercase; letter-spacing: 1px; font-weight: 500; }
+  .tag-list { padding: 0 8px; }
+  .tag-item { display: flex; align-items: center; gap: 8px; padding: 6px 12px; font-size: 13px; color: var(--muted); cursor: pointer; border-radius: 8px; }
+  .tag-item:hover { background: var(--sand); }
+  .tag-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .tag-count { margin-left: auto; font-size: 12px; color: var(--stone); }
+  .tag-add { display: flex; align-items: center; gap: 6px; padding: 6px 12px; margin: 4px 8px; font-size: 13px; color: var(--stone); cursor: pointer; border-radius: 8px; border: 1px dashed var(--border2); background: none; width: calc(100% - 16px); font-family: var(--font-sans); }
+  .tag-add:hover { border-color: var(--accent); color: var(--accent); }
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .topbar { display: flex; align-items: center; gap: 12px; padding: 16px 28px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .search-box { flex: 1; display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--border2); border-radius: 10px; padding: 8px 14px; max-width: 480px; }
+  .search-box:focus-within { border-color: var(--accent); }
+  .search-box svg { width: 16px; height: 16px; color: var(--stone); flex-shrink: 0; }
+  .search-box input { flex: 1; border: none; background: none; font-size: 14px; color: var(--fg); font-family: var(--font-sans); outline: none; }
+  .search-box input::placeholder { color: var(--stone); }
+  .search-box kbd { font-size: 11px; background: var(--sand); padding: 2px 6px; border-radius: 4px; color: var(--stone); border: 1px solid var(--border2); }
+  .topbar-actions { display: flex; gap: 8px; margin-left: auto; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; border: none; font-family: var(--font-sans); transition: all 0.15s; }
+  .btn svg { width: 16px; height: 16px; }
+  .btn-accent { background: var(--accent); color: var(--surface); }
+  .btn-accent:hover { background: #b85a3a; }
+  .btn-ghost { background: var(--surface); color: var(--fg2); border: 1px solid var(--border2); }
+  .btn-ghost:hover { background: var(--sand); }
+  .filterbar { display: flex; align-items: center; gap: 4px; padding: 10px 28px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .filter-tab { padding: 6px 14px; font-size: 13px; color: var(--muted); cursor: pointer; border-radius: 6px; border: none; background: none; font-family: var(--font-sans); font-weight: 500; }
+  .filter-tab:hover { background: var(--sand); color: var(--fg2); }
+  .filter-tab.active { background: var(--sand); color: var(--fg); }
+  .view-toggle { display: flex; gap: 2px; margin-left: auto; }
+  .view-btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 6px; border: none; background: none; cursor: pointer; color: var(--stone); }
+  .view-btn:hover { background: var(--sand); }
+  .view-btn.active { background: var(--sand); color: var(--fg); }
+  .view-btn svg { width: 16px; height: 16px; }
+  .paper-area { flex: 1; overflow-y: auto; padding: 24px 28px; }
+  .paper-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+  .paper-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; cursor: pointer; transition: border-color 0.2s, box-shadow 0.2s; position: relative; }
+  .paper-card:hover { border-color: var(--ring-deep); box-shadow: 0 0 0 1px var(--ring); }
+  .paper-fav { position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border-radius: 6px; border: none; background: rgba(255,255,255,0.85); cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--stone); font-size: 14px; opacity: 0; transition: opacity 0.15s; backdrop-filter: blur(4px); z-index: 2; }
+  .paper-card:hover .paper-fav { opacity: 1; }
+  .paper-fav.active { opacity: 1; color: var(--accent); }
+  .paper-thumb { height: 120px; background: var(--sand); display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
+  .paper-thumb-lines { width: 70%; display: flex; flex-direction: column; gap: 4px; opacity: 0.4; }
+  .paper-thumb-line { height: 3px; background: var(--stone); border-radius: 2px; }
+  .paper-thumb-line:nth-child(1) { width: 90%; } .paper-thumb-line:nth-child(2) { width: 100%; } .paper-thumb-line:nth-child(3) { width: 75%; } .paper-thumb-line:nth-child(4) { width: 95%; } .paper-thumb-line:nth-child(5) { width: 60%; } .paper-thumb-line:nth-child(6) { width: 85%; } .paper-thumb-line:nth-child(7) { width: 70%; }
+  .paper-status { position: absolute; bottom: 8px; right: 8px; font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 500; }
+  .status-parsed { background: var(--success-bg); color: var(--success); }
+  .status-parsing { background: var(--warn-bg); color: var(--warn); }
+  .status-pending { background: var(--sand); color: var(--stone); }
+  .paper-body { padding: 14px 16px 12px; }
+  .paper-title { font-family: var(--font-serif); font-size: 15px; font-weight: 500; color: var(--fg); line-height: 1.35; margin-bottom: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .paper-meta { font-size: 12px; color: var(--stone); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .paper-meta-dot { width: 3px; height: 3px; border-radius: 50%; background: var(--stone); }
+  .paper-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 8px; }
+  .paper-tag { font-size: 11px; padding: 1px 8px; border-radius: 4px; font-weight: 500; }
+  .paper-progress { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .paper-progress-bar { height: 100%; background: var(--accent); border-radius: 2px; }
+  .paper-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; font-size: 11px; color: var(--stone); }
+  .paper-reading { display: flex; align-items: center; gap: 4px; }
+  .toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 300; display: flex; flex-direction: column; gap: 8px; }
+  .toast { background: var(--deep); color: var(--surface); padding: 12px 20px; border-radius: 10px; font-size: 13px; box-shadow: 0 4px 16px rgba(0,0,0,0.15); animation: toastIn 0.3s ease; }
+  @keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .hint-overlay { position: fixed; bottom: 20px; left: 280px; background: var(--deep); color: var(--surface); padding: 10px 18px; border-radius: 10px; font-size: 12px; z-index: 50; opacity: 0.9; line-height: 1.6; max-width: 500px; }
+  .hint-overlay strong { color: var(--coral); }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-brand"><div class="sidebar-logo">P</div><div class="sidebar-name">PaperLens</div></div>
+    <nav class="sidebar-nav">
+      <button class="nav-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>全部论文 <span class="nav-count">8</span></button>
+      <button class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>最近阅读 <span class="nav-count">3</span></button>
+      <button class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>我的收藏 <span class="nav-count">2</span></button>
+      <button class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/></svg>待翻译 <span class="nav-count">2</span></button>
+    </nav>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-label">标签</div>
+    <div class="tag-list">
+      <div class="tag-item"><span class="tag-dot" style="background:#5b8ef5"></span>NLP <span class="tag-count">3</span></div>
+      <div class="tag-item"><span class="tag-dot" style="background:#e5a24a"></span>Computer Vision <span class="tag-count">2</span></div>
+      <div class="tag-item"><span class="tag-dot" style="background:#7c6bc4"></span>Generative AI <span class="tag-count">2</span></div>
+      <div class="tag-item"><span class="tag-dot" style="background:#48a998"></span>Graph Neural Net <span class="tag-count">1</span></div>
+      <button class="tag-add"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>新建标签</button>
+    </div>
+  </aside>
+  <main class="main">
+    <div class="topbar">
+      <div class="search-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><input type="text" placeholder="搜索论文标题、作者…"><kbd>⌘K</kbd></div>
+      <div class="topbar-actions">
+        <button class="btn btn-ghost" onclick="showToast('URL 导入')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>URL 导入</button>
+        <button class="btn btn-accent" onclick="showToast('上传论文弹窗')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>上传论文</button>
+      </div>
+    </div>
+    <div class="filterbar">
+      <button class="filter-tab active">最近添加</button><button class="filter-tab">最近阅读</button><button class="filter-tab">按标题</button>
+      <div class="view-toggle">
+        <button class="view-btn active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></button>
+        <button class="view-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></button>
+      </div>
+    </div>
+    <div class="paper-area"><div class="paper-grid">
+      <div class="paper-card" onclick="window.location.href='reader.html'"><div class="paper-thumb"><div class="paper-thumb-lines"><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div></div><button class="paper-fav active" onclick="event.stopPropagation()">♥</button><span class="paper-status status-parsed">已解析</span></div><div class="paper-body"><div class="paper-title">Attention Is All You Need</div><div class="paper-meta">Vaswani et al. <span class="paper-meta-dot"></span> 2017 <span class="paper-meta-dot"></span> NeurIPS</div><div class="paper-tags"><span class="paper-tag" style="background:#e8f0fe;color:#3b6fc0">NLP</span></div><div class="paper-progress"><div class="paper-progress-bar" style="width:60%"></div></div><div class="paper-footer"><span class="paper-reading">P.9 / 15</span><span>3 天前</span></div></div></div>
+      <div class="paper-card"><div class="paper-thumb"><div class="paper-thumb-lines"><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div></div><button class="paper-fav" onclick="event.stopPropagation()">♡</button><span class="paper-status status-parsed">已解析</span></div><div class="paper-body"><div class="paper-title">BERT: Pre-training of Deep Bidirectional Transformers</div><div class="paper-meta">Devlin et al. <span class="paper-meta-dot"></span> 2019 <span class="paper-meta-dot"></span> NAACL</div><div class="paper-tags"><span class="paper-tag" style="background:#e8f0fe;color:#3b6fc0">NLP</span></div><div class="paper-progress"><div class="paper-progress-bar" style="width:100%"></div></div><div class="paper-footer"><span class="paper-reading">P.16 / 16</span><span>1 周前</span></div></div></div>
+      <div class="paper-card"><div class="paper-thumb"><div class="paper-thumb-lines"><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div></div><button class="paper-fav active" onclick="event.stopPropagation()">♥</button><span class="paper-status status-parsing">解析中</span></div><div class="paper-body"><div class="paper-title">An Image is Worth 16x16 Words: ViT</div><div class="paper-meta">Dosovitskiy et al. <span class="paper-meta-dot"></span> 2021 <span class="paper-meta-dot"></span> ICLR</div><div class="paper-tags"><span class="paper-tag" style="background:#fef3cd;color:#946b2d">CV</span></div><div class="paper-progress"><div class="paper-progress-bar" style="width:45%"></div></div><div class="paper-footer"><span class="paper-reading">P.7 / 16</span><span>今天</span></div></div></div>
+      <div class="paper-card"><div class="paper-thumb"><div class="paper-thumb-lines"><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div></div><button class="paper-fav" onclick="event.stopPropagation()">♡</button><span class="paper-status status-parsed">已解析</span></div><div class="paper-body"><div class="paper-title">Language Models are Few-Shot Learners</div><div class="paper-meta">Brown et al. <span class="paper-meta-dot"></span> 2020 <span class="paper-meta-dot"></span> NeurIPS</div><div class="paper-tags"><span class="paper-tag" style="background:#e8f0fe;color:#3b6fc0">NLP</span><span class="paper-tag" style="background:#f0e8fe;color:#6b4fc0">Gen AI</span></div><div class="paper-progress"><div class="paper-progress-bar" style="width:15%"></div></div><div class="paper-footer"><span class="paper-reading">P.12 / 75</span><span>5 天前</span></div></div></div>
+      <div class="paper-card"><div class="paper-thumb"><div class="paper-thumb-lines"><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div></div><button class="paper-fav" onclick="event.stopPropagation()">♡</button><span class="paper-status status-parsed">已解析</span></div><div class="paper-body"><div class="paper-title">Deep Residual Learning for Image Recognition</div><div class="paper-meta">He et al. <span class="paper-meta-dot"></span> 2016 <span class="paper-meta-dot"></span> CVPR</div><div class="paper-tags"><span class="paper-tag" style="background:#fef3cd;color:#946b2d">CV</span></div><div class="paper-progress"><div class="paper-progress-bar" style="width:100%"></div></div><div class="paper-footer"><span class="paper-reading">P.9 / 9</span><span>2 周前</span></div></div></div>
+      <div class="paper-card"><div class="paper-thumb"><div class="paper-thumb-lines"><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div></div><button class="paper-fav" onclick="event.stopPropagation()">♡</button><span class="paper-status status-pending">待解析</span></div><div class="paper-body"><div class="paper-title">Denoising Diffusion Probabilistic Models</div><div class="paper-meta">Ho et al. <span class="paper-meta-dot"></span> 2020 <span class="paper-meta-dot"></span> NeurIPS</div><div class="paper-tags"><span class="paper-tag" style="background:#f0e8fe;color:#6b4fc0">Gen AI</span></div><div class="paper-progress"><div class="paper-progress-bar" style="width:0%"></div></div><div class="paper-footer"><span>未开始</span><span>昨天</span></div></div></div>
+      <div class="paper-card"><div class="paper-thumb"><div class="paper-thumb-lines"><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div></div><button class="paper-fav" onclick="event.stopPropagation()">♡</button><span class="paper-status status-parsed">已解析</span></div><div class="paper-body"><div class="paper-title">Semi-Supervised Classification with GCNs</div><div class="paper-meta">Kipf & Welling <span class="paper-meta-dot"></span> 2017 <span class="paper-meta-dot"></span> ICLR</div><div class="paper-tags"><span class="paper-tag" style="background:#e0f5f0;color:#2d7a6a">Graph</span></div><div class="paper-progress"><div class="paper-progress-bar" style="width:70%"></div></div><div class="paper-footer"><span class="paper-reading">P.10 / 14</span><span>4 天前</span></div></div></div>
+      <div class="paper-card"><div class="paper-thumb"><div class="paper-thumb-lines"><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div><div class="paper-thumb-line"></div></div><button class="paper-fav" onclick="event.stopPropagation()">♡</button><span class="paper-status status-parsed">已解析</span></div><div class="paper-body"><div class="paper-title">Proximal Policy Optimization Algorithms</div><div class="paper-meta">Schulman et al. <span class="paper-meta-dot"></span> 2017 <span class="paper-meta-dot"></span> arXiv</div><div class="paper-tags"><span class="paper-tag" style="background:#fde8e0;color:#b85a3a">RL</span></div><div class="paper-progress"><div class="paper-progress-bar" style="width:35%"></div></div><div class="paper-footer"><span class="paper-reading">P.5 / 14</span><span>1 周前</span></div></div></div>
+    </div></div>
+  </main>
+</div>
+<div class="toast-container" id="toasts"></div>
+<div class="hint-overlay"><strong>交互说明：</strong>左键点击论文卡片 → 进入阅读器 | 右键卡片 → 上下文菜单 | 悬停 → 收藏按钮 | 顶部「上传论文」→ 导入弹窗 | 共 4 页：home.html / reader.html / models.html / settings.html</div>
+<script>function showToast(m){const t=document.createElement('div');t.className='toast';t.textContent=m;document.getElementById('toasts').appendChild(t);setTimeout(()=>t.remove(),3000)}</script>
+</body>
+</html>

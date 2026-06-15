@@ -1,0 +1,66 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+__pycache__/
+**/__pycache__/
+*.pyc
+
+# Build outputs
+frontend/dist/
+backend/dist/
+backend/build/
+src-tauri/target/
+build-exe/dist/
+build-exe/release/
+build-engines/dist/
+build-engines/venv-*/
+build-engines/.pyinstaller-*/
+build-engines/build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+*.egg-info/
+.venv/
+venv/
+
+# Database (不要上传用户数据)
+backend/data/data.db
+backend/data/data.db-shm
+backend/data/data.db-wal
+backend/data/papers/
+data/data.db
+data/data.db-shm
+data/data.db-wal
+data/papers/
+data/images/
+
+# Logs
+*.log
+backend/logs/
+
+# Environment
+.env
+.env.local
+
+# Tauri
+src-tauri/Cargo.lock
+
+# Debug files
+debug_parse/
+
+# Backend test data
+backend/data/paperlens.db
+
+# Temp files
+*.tmp
+*.bak
+*.pdf

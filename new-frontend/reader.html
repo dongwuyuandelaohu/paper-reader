@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PaperLens — 论文阅读</title>
+<style>
+  :root {
+    --bg: #141413;
+    --surface: #1e1e1c;
+    --surface2: #262624;
+    --surface3: #30302e;
+    --fg: #faf9f5;
+    --fg2: #e8e6dc;
+    --muted: #b0aea5;
+    --stone: #87867f;
+    --dark: #5e5d59;
+    --border: #30302e;
+    --border2: #3d3d3a;
+    --accent: #c96442;
+    --coral: #d97757;
+    --focus: #3898ec;
+    --success: #4ade80;
+    --success-bg: rgba(74,222,128,0.1);
+    --warn: #fbbf24;
+    --warn-bg: rgba(251,191,36,0.1);
+    --font-serif: Georgia, 'Times New Roman', serif;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --font-mono: 'SF Mono', 'JetBrains Mono', 'Consolas', monospace;
+  }
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: var(--font-sans); background: var(--bg); color: var(--fg); -webkit-font-smoothing: antialiased; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--dark); }
+
+  /* ========== Toolbar ========== */
+  .toolbar {
+    display: flex; align-items: center; padding: 6px 12px;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    flex-shrink: 0; gap: 8px; min-height: 44px;
+  }
+  .toolbar-left { display: flex; align-items: center; gap: 6px; }
+  .toolbar-center { flex: 1; display: flex; align-items: center; justify-content: center; gap: 16px; }
+  .toolbar-right { display: flex; align-items: center; gap: 4px; }
+
+  .tool-btn {
+    display: flex; align-items: center; gap: 5px; padding: 5px 10px;
+    border-radius: 6px; border: none; background: none; color: var(--muted);
+    cursor: pointer; font-size: 13px; font-family: var(--font-sans);
+    transition: background 0.15s, color 0.15s; white-space: nowrap;
+  }
+  .tool-btn:hover { background: var(--surface2); color: var(--fg); }
+  .tool-btn.active { background: var(--surface3); color: var(--coral); }
+  .tool-btn svg { width: 16px; height: 16px; }
+  .tool-divider { width: 1px; height: 20px; background: var(--border); flex-shrink: 0; }
+
+  .paper-title-bar {
+    font-family: var(--font-serif); font-size: 14px; font-weight: 500;
+    color: var(--fg); max-width: 320px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  /* Zoom controls */
+  .zoom-controls { display: flex; align-items: center; gap: 2px; }
+  .zoom-btn {
+    width: 28px; height: 28px; border-radius: 5px; border: none;
+    background: none; color: var(--muted); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; font-size: 16px;
+  }
+  .zoom-btn:hover { background: var(--surface2); color: var(--fg); }
+  .zoom-value { font-size: 12px; color: var(--muted); min-width: 40px; text-align: center; font-variant-numeric: tabular-nums; }
+
+  /* Page nav */
+  .page-nav { display: flex; align-items: center; gap: 4px; }
+  .page-input {
+    width: 36px; height: 26px; text-align: center; border-radius: 4px;
+    border: 1px solid var(--border); background: var(--surface2); color: var(--fg);
+    font-size: 12px; font-family: var(--font-sans); font-variant-numeric: tabular-nums;
+  }
+  .page-input:focus { outline: none; border-color: var(--accent); }
+  .page-total { font-size: 12px; color: var(--stone); }
+
+  /* Parse button */
+  .btn-parse {
+    display: flex; align-items: center; gap: 5px; padding: 5px 12px;
+    border-radius: 6px; border: 1px solid var(--accent); background: rgba(201,100,66,0.12);
+    color: var(--coral); cursor: pointer; font-size: 13px; font-weight: 500;
+    font-family: var(--font-sans); transition: background 0.15s;
+  }
+  .btn-parse:hover { background: rgba(201,100,66,0.2); }
+  .btn-parse svg { width: 14px; height: 14px; }
+
+  /* Q&A button */
+  .btn-qa {
+    display: flex; align-items: center; gap: 5px; padding: 5px 12px;
+    border-radius: 6px; border: none; background: var(--accent);
+    color: var(--fg); cursor: pointer; font-size: 13px; font-weight: 500;
+    font-family: var(--font-sans); transition: background 0.15s;
+  }
+  .btn-qa:hover { background: #b85a3a; }
+  .btn-qa svg { width: 14px; height: 14px; }
+
+  /* ========== Main Reader Area ========== */
+  .reader-main { display: flex; flex: 1; overflow: hidden; }
+
+  /* ========== TOC Sidebar ========== */
+  .toc-sidebar {
+    width: 220px; background: var(--surface); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; flex-shrink: 0;
+    transition: width 0.25s, margin-left 0.25s; overflow: hidden;
+  }
+  .toc-sidebar.collapsed { width: 0; border-right: none; }
+  .toc-header {
+    display: flex; align-items: center; padding: 12px 14px; gap: 6px;
+    border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .toc-header-title { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; flex: 1; }
+  .toc-header-close {
+    width: 24px; height: 24px; border-radius: 4px; border: none;
+    background: none; color: var(--stone); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .toc-header-close:hover { background: var(--surface2); color: var(--fg); }
+  .toc-list { flex: 1; overflow-y: auto; padding: 8px; }
+  .toc-entry {
+    display: block; padding: 6px 8px; font-size: 13px; color: var(--muted);
+    cursor: pointer; border-radius: 6px; border: none; background: none;
+    width: 100%; text-align: left; font-family: var(--font-sans); line-height: 1.4;
+    transition: background 0.1s, color 0.1s;
+  }
+  .toc-entry:hover { background: var(--surface2); color: var(--fg2); }
+  .toc-entry.active { background: var(--surface3); color: var(--coral); }
+  .toc-entry.h2 { padding-left: 20px; font-size: 12px; }
+  .toc-entry.h3 { padding-left: 32px; font-size: 12px; color: var(--stone); }
+  .toc-page-tag { font-size: 10px; color: var(--dark); margin-left: 4px; font-variant-numeric: tabular-nums; }
+
+  /* ========== PDF Panel ========== */
+  .pdf-panel {
+    flex: 1; display: flex; flex-direction: column; overflow: hidden;
+    background: var(--bg); position: relative; min-width: 0;
+  }
+  .pdf-viewport {
+    flex: 1; overflow: auto; display: flex; align-items: flex-start;
+    justify-content: center; padding: 24px; position: relative;
+  }
+  .pdf-page-wrapper {
+    position: relative; transition: transform 0.2s;
+  }
+  .pdf-page {
+    background: #ffffff; border-radius: 2px; padding: 48px 44px;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.3); position: relative;
+    color: #1a1a1a; font-size: 11px; line-height: 1.7;
+    width: 520px; min-height: 680px;
+  }
+  .pdf-page-num {
+    position: absolute; bottom: 16px; left: 0; right: 0; text-align: center;
+    font-size: 10px; color: #999;
+  }
+  .pdf-h1 { font-size: 18px; font-weight: 700; margin-bottom: 8px; color: #111; text-align: center; }
+  .pdf-authors { text-align: center; font-size: 10px; color: #555; margin-bottom: 16px; }
+  .pdf-h2 { font-size: 13px; font-weight: 700; margin: 16px 0 6px; color: #222; }
+  .pdf-p { margin-bottom: 8px; text-align: justify; font-size: 10.5px; line-height: 1.65; color: #333; }
+  .pdf-abstract { font-style: italic; margin: 12px 8px; padding: 8px 12px; border-left: 2px solid #ddd; }
+  .pdf-fig { background: #f5f5f5; border: 1px solid #e5e5e5; border-radius: 3px; margin: 12px 0; padding: 20px; text-align: center; }
+  .pdf-fig-caption { font-size: 9px; color: #777; margin-top: 6px; }
+  .pdf-eq { background: #fafafa; border: 1px solid #eee; padding: 8px 16px; margin: 8px 0; text-align: center; font-family: var(--font-serif); font-style: italic; font-size: 12px; border-radius: 2px; }
+
+  /* ========== Parse Panel ========== */
+  .parse-panel {
+    width: 420px; background: var(--surface); border-left: 1px solid var(--border);
+    display: flex; flex-direction: column; flex-shrink: 0;
+    transition: width 0.25s; overflow: hidden;
+  }
+  .parse-panel.collapsed { width: 0; border-left: none; }
+  .parse-header {
+    display: flex; align-items: center; padding: 10px 16px;
+    border-bottom: 1px solid var(--border); flex-shrink: 0; gap: 8px;
+  }
+  .parse-header-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .parse-header-page { font-size: 12px; color: var(--stone); }
+  .parse-view-toggle {
+    display: flex; gap: 2px; margin-left: auto; background: var(--surface2);
+    border-radius: 6px; padding: 2px;
+  }
+  .parse-view-btn {
+    padding: 4px 10px; border-radius: 4px; border: none; background: none;
+    color: var(--stone); cursor: pointer; font-size: 11px; font-weight: 500;
+    font-family: var(--font-sans); transition: background 0.1s, color 0.1s;
+  }
+  .parse-view-btn.active { background: var(--surface3); color: var(--fg); }
+
+  .parse-body { flex: 1; overflow-y: auto; padding: 12px; }
+
+  /* Parse chunk */
+  .parse-chunk {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+    margin-bottom: 10px; overflow: hidden; position: relative;
+  }
+  .parse-chunk-header {
+    display: flex; align-items: center; padding: 8px 12px;
+    border-bottom: 1px solid var(--border); gap: 8px;
+  }
+  .parse-chunk-label {
+    font-size: 11px; color: var(--stone); font-weight: 500;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .parse-chunk-label .chunk-type {
+    font-size: 10px; padding: 1px 6px; border-radius: 3px;
+    background: var(--surface3); color: var(--muted);
+  }
+  .parse-chunk-actions { margin-left: auto; display: flex; gap: 4px; }
+  .chunk-action-btn {
+    padding: 3px 8px; border-radius: 4px; border: 1px solid var(--border);
+    background: none; color: var(--stone); cursor: pointer; font-size: 11px;
+    font-family: var(--font-sans); display: flex; align-items: center; gap: 4px;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .chunk-action-btn:hover { border-color: var(--accent); color: var(--coral); }
+  .chunk-action-btn.translated { border-color: var(--success); color: var(--success); }
+  .chunk-action-btn svg { width: 12px; height: 12px; }
+
+  .parse-chunk-content {
+    padding: 12px; font-size: 13px; color: var(--fg2); line-height: 1.7;
+  }
+  .parse-chunk-content h3 { font-family: var(--font-serif); font-size: 15px; font-weight: 500; color: var(--fg); margin-bottom: 8px; }
+  .parse-chunk-content h4 { font-family: var(--font-serif); font-size: 14px; font-weight: 500; color: var(--fg); margin-bottom: 6px; }
+  .parse-chunk-content p { margin-bottom: 8px; }
+  .parse-chunk-content code { font-family: var(--font-mono); font-size: 12px; background: var(--surface3); padding: 1px 5px; border-radius: 3px; }
+  .parse-chunk-content .math { font-family: var(--font-serif); font-style: italic; background: var(--surface3); padding: 4px 8px; border-radius: 4px; display: block; margin: 8px 0; text-align: center; }
+  .parse-chunk-content .figure-block { background: var(--surface3); border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin: 8px 0; text-align: center; }
+  .parse-chunk-content .figure-block img { max-width: 100%; border-radius: 4px; }
+  .parse-chunk-content .fig-caption { font-size: 11px; color: var(--stone); margin-top: 6px; }
+  .parse-chunk-content .table-block { margin: 8px 0; overflow-x: auto; }
+  .parse-chunk-content table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .parse-chunk-content th { background: var(--surface3); padding: 6px 10px; text-align: left; font-weight: 600; color: var(--fg); border: 1px solid var(--border); }
+  .parse-chunk-content td { padding: 6px 10px; border: 1px solid var(--border); color: var(--muted); }
+
+  /* Translation result area */
+  .parse-translation {
+    border-top: 1px solid var(--border); padding: 12px;
+    background: rgba(201,100,66,0.04); display: none;
+  }
+  .parse-translation.show { display: block; }
+  .parse-translation-header {
+    display: flex; align-items: center; gap: 6px; margin-bottom: 8px;
+  }
+  .parse-translation-label { font-size: 11px; color: var(--coral); font-weight: 500; }
+  .parse-translation p { font-size: 13px; color: var(--fg2); line-height: 1.8; margin-bottom: 6px; }
+
+  /* Parse loading skeleton */
+  .parse-loading {
+    display: flex; flex-direction: column; gap: 12px; padding: 20px;
+    align-items: center; text-align: center;
+  }
+  .parse-loading-icon {
+    width: 32px; height: 32px; border: 3px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .parse-loading-text { font-size: 13px; color: var(--stone); }
+  .parse-loading-progress { width: 200px; height: 4px; background: var(--surface3); border-radius: 2px; overflow: hidden; }
+  .parse-loading-bar { height: 100%; background: var(--accent); border-radius: 2px; animation: parseProgress 2s ease-in-out; }
+  @keyframes parseProgress { from { width: 0; } to { width: 65%; } }
+
+  /* ========== Q&A Panel ========== */
+  .qa-panel {
+    width: 380px; background: var(--surface); border-left: 1px solid var(--border);
+    display: flex; flex-direction: column; flex-shrink: 0;
+    transition: width 0.25s; overflow: hidden;
+  }
+  .qa-panel.collapsed { width: 0; border-left: none; }
+  .qa-header {
+    display: flex; align-items: center; padding: 10px 16px;
+    border-bottom: 1px solid var(--border); flex-shrink: 0; gap: 8px;
+  }
+  .qa-header-title { font-size: 13px; font-weight: 600; color: var(--fg); flex: 1; }
+  .qa-header-model { font-size: 11px; color: var(--stone); padding: 2px 8px; background: var(--surface2); border-radius: 4px; }
+  .qa-header-close {
+    width: 28px; height: 28px; border-radius: 6px; border: none;
+    background: none; color: var(--stone); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; font-size: 16px;
+  }
+  .qa-header-close:hover { background: var(--surface2); color: var(--fg); }
+
+  .qa-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+  .qa-msg { display: flex; flex-direction: column; gap: 4px; }
+  .qa-msg.user { align-items: flex-end; }
+  .qa-msg.assistant { align-items: flex-start; }
+  .qa-msg-label { font-size: 11px; color: var(--dark); margin-bottom: 2px; font-weight: 500; }
+  .qa-msg-bubble {
+    max-width: 300px; padding: 10px 14px; border-radius: 12px;
+    font-size: 13px; line-height: 1.7;
+  }
+  .qa-msg.user .qa-msg-bubble {
+    background: var(--accent); color: var(--fg); border-bottom-right-radius: 4px;
+  }
+  .qa-msg.assistant .qa-msg-bubble {
+    background: var(--surface2); color: var(--fg2); border-bottom-left-radius: 4px;
+  }
+  .qa-msg-citation {
+    background: var(--surface3); border-left: 2px solid var(--coral);
+    padding: 6px 10px; border-radius: 0 6px 6px 0; max-width: 300px;
+    font-size: 11px; color: var(--stone); line-height: 1.5; font-style: italic;
+  }
+  .qa-msg-citation-page { font-size: 10px; color: var(--coral); font-style: normal; margin-bottom: 2px; font-weight: 500; }
+  .qa-msg-actions { display: flex; gap: 4px; margin-top: 4px; }
+  .qa-msg-action {
+    background: none; border: none; color: var(--dark); cursor: pointer;
+    font-size: 11px; padding: 2px 6px; border-radius: 4px;
+  }
+  .qa-msg-action:hover { background: var(--surface2); color: var(--muted); }
+
+  .qa-quick-actions { padding: 8px 16px; display: flex; gap: 6px; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
+  .qa-quick-btn {
+    font-size: 11px; padding: 4px 10px; border-radius: 14px;
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--muted); cursor: pointer; font-family: var(--font-sans);
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .qa-quick-btn:hover { border-color: var(--accent); color: var(--coral); }
+
+  .qa-input-area { padding: 12px 16px; border-top: 1px solid var(--border); flex-shrink: 0; }
+  .qa-input-row { display: flex; gap: 8px; align-items: flex-end; }
+  .qa-input {
+    flex: 1; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 14px; color: var(--fg); font-size: 13px;
+    font-family: var(--font-sans); resize: none; min-height: 40px; max-height: 100px;
+    outline: none; transition: border-color 0.15s;
+  }
+  .qa-input:focus { border-color: var(--accent); }
+  .qa-input::placeholder { color: var(--dark); }
+  .qa-send-btn {
+    width: 36px; height: 36px; border-radius: 8px; border: none;
+    background: var(--accent); color: var(--fg); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    transition: background 0.15s;
+  }
+  .qa-send-btn:hover { background: #b85a3a; }
+  .qa-send-btn svg { width: 16px; height: 16px; }
+  .qa-input-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; font-size: 11px; color: var(--dark); }
+
+  /* ========== Parse Engine Modal ========== */
+  .engine-overlay {
+    position: fixed; inset: 0; background: rgba(20,20,19,0.5); z-index: 200;
+    display: none; align-items: center; justify-content: center;
+    backdrop-filter: blur(2px);
+  }
+  .engine-overlay.show { display: flex; }
+  .engine-modal {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    width: 440px; overflow: hidden; box-shadow: 0 8px 40px rgba(0,0,0,0.3);
+  }
+  .engine-modal-header {
+    display: flex; align-items: center; padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .engine-modal-title { font-family: var(--font-serif); font-size: 18px; font-weight: 500; color: var(--fg); flex: 1; }
+  .engine-modal-close {
+    width: 28px; height: 28px; border-radius: 6px; border: none;
+    background: none; color: var(--stone); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; font-size: 16px;
+  }
+  .engine-modal-close:hover { background: var(--surface2); color: var(--fg); }
+  .engine-list { padding: 16px 20px; }
+  .engine-item {
+    display: flex; align-items: center; gap: 12px; padding: 12px;
+    border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px;
+    cursor: pointer; transition: border-color 0.15s, background 0.15s;
+  }
+  .engine-item:hover { border-color: var(--border2); background: var(--surface2); }
+  .engine-item.selected { border-color: var(--accent); background: rgba(201,100,66,0.06); }
+  .engine-radio {
+    width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--border2);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .engine-item.selected .engine-radio { border-color: var(--accent); }
+  .engine-item.selected .engine-radio::after {
+    content: ''; width: 10px; height: 10px; border-radius: 50%; background: var(--accent);
+  }
+  .engine-info { flex: 1; }
+  .engine-name { font-size: 14px; font-weight: 500; color: var(--fg); display: flex; align-items: center; gap: 6px; }
+  .engine-name .badge {
+    font-size: 10px; padding: 1px 6px; border-radius: 3px;
+    background: var(--success-bg); color: var(--success); font-weight: 500;
+  }
+  .engine-desc { font-size: 12px; color: var(--stone); margin-top: 2px; }
+  .engine-item.default .engine-name::after {
+    content: '默认'; font-size: 10px; padding: 1px 6px; border-radius: 3px;
+    background: var(--surface3); color: var(--muted); font-weight: 500; margin-left: 4px;
+  }
+  .engine-modal-footer {
+    display: flex; justify-content: flex-end; gap: 8px;
+    padding: 12px 20px; border-top: 1px solid var(--border);
+  }
+  .btn-modal {
+    padding: 7px 16px; border-radius: 8px; font-size: 13px; font-weight: 500;
+    cursor: pointer; border: none; font-family: var(--font-sans);
+  }
+  .btn-modal-ghost { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
+  .btn-modal-ghost:hover { background: var(--surface3); color: var(--fg); }
+  .btn-modal-accent { background: var(--accent); color: var(--fg); }
+  .btn-modal-accent:hover { background: #b85a3a; }
+
+  /* ========== Toast ========== */
+  .toast-container { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 300; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .toast {
+    background: var(--surface3); color: var(--fg); padding: 10px 20px;
+    border-radius: 8px; font-size: 13px; box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+    animation: toastIn 0.3s ease; border: 1px solid var(--border2);
+  }
+  @keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* ========== Hint Bar ========== */
+  .hint-bar {
+    position: fixed; bottom: 16px; left: 240px;
+    background: var(--surface3); color: var(--muted); padding: 8px 16px;
+    border-radius: 8px; font-size: 11px; z-index: 50; border: 1px solid var(--border2);
+    max-width: 600px; line-height: 1.5;
+  }
+  .hint-bar strong { color: var(--coral); }
+</style>
+</head>
+<body>
+
+<!-- ===== Toolbar ===== -->
+<div class="toolbar">
+  <div class="toolbar-left">
+    <button class="tool-btn" onclick="window.location.href='home.html'" title="返回论文库">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
+    </button>
+    <span class="paper-title-bar">Attention Is All You Need</span>
+  </div>
+
+  <div class="toolbar-center">
+    <!-- Zoom -->
+    <div class="zoom-controls">
+      <button class="zoom-btn" onclick="zoom(-10)" title="缩小">−</button>
+      <span class="zoom-value" id="zoomValue">100%</span>
+      <button class="zoom-btn" onclick="zoom(10)" title="放大">+</button>
+      <button class="zoom-btn" onclick="zoomFit()" title="适应宽度" style="font-size:12px">⊡</button>
+    </div>
+
+    <div class="tool-divider"></div>
+
+    <!-- Page navigation -->
+    <div class="page-nav">
+      <button class="zoom-btn" onclick="prevPage()" title="上一页">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
+      </button>
+      <input class="page-input" type="number" value="9" min="1" max="15" onchange="goPage(this.value)" id="pageInput">
+      <span class="page-total">/ 15</span>
+      <button class="zoom-btn" onclick="nextPage()" title="下一页">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="toolbar-right">
+    <button class="tool-btn" id="tocToggle" onclick="toggleToc()" title="目录导航">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      目录
+    </button>
+
+    <div class="tool-divider"></div>
+
+    <button class="btn-parse" onclick="openEngineModal()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+      解析
+    </button>
+
+    <button class="btn-qa" onclick="toggleQA()" id="qaToggleBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      问答
+    </button>
+  </div>
+</div>
+
+<!-- ===== Main Reader ===== -->
+<div class="reader-main">
+
+  <!-- TOC Sidebar -->
+  <aside class="toc-sidebar" id="tocSidebar">
+    <div class="toc-header">
+      <span class="toc-header-title">目录导航</span>
+      <button class="toc-header-close" onclick="toggleToc()">×</button>
+    </div>
+    <div class="toc-list">
+      <button class="toc-entry active" onclick="jumpTo(this, 1)">Abstract <span class="toc-page-tag">p.1</span></button>
+      <button class="toc-entry" onclick="jumpTo(this, 1)">1 Introduction <span class="toc-page-tag">p.1</span></button>
+      <button class="toc-entry" onclick="jumpTo(this, 2)">2 Background <span class="toc-page-tag">p.2</span></button>
+      <button class="toc-entry h2" onclick="jumpTo(this, 2)">2.1 Self-Attention <span class="toc-page-tag">p.2</span></button>
+      <button class="toc-entry h2" onclick="jumpTo(this, 3)">2.2 End-to-End Memory <span class="toc-page-tag">p.3</span></button>
+      <button class="toc-entry" onclick="jumpTo(this, 3)">3 Model Architecture <span class="toc-page-tag">p.3</span></button>
+      <button class="toc-entry h2" onclick="jumpTo(this, 3)">3.1 Encoder and Decoder <span class="toc-page-tag">p.3</span></button>
+      <button class="toc-entry h2" onclick="jumpTo(this, 4)">3.2 Position-wise FFN <span class="toc-page-tag">p.4</span></button>
+      <button class="toc-entry h2" onclick="jumpTo(this, 4)">3.3 Attention Mechanisms <span class="toc-page-tag">p.4</span></button>
+      <button class="toc-entry h3" onclick="jumpTo(this, 4)">3.3.1 Scaled Dot-Product <span class="toc-page-tag">p.4</span></button>
+      <button class="toc-entry h3" onclick="jumpTo(this, 5)">3.3.2 Multi-Head Attention <span class="toc-page-tag">p.5</span></button>
+      <button class="toc-entry h2" onclick="jumpTo(this, 5)">3.4 Positional Encoding <span class="toc-page-tag">p.5</span></button>
+      <button class="toc-entry" onclick="jumpTo(this, 6)">4 Why Self-Attention <span class="toc-page-tag">p.6</span></button>
+      <button class="toc-entry" onclick="jumpTo(this, 7)">5 Training <span class="toc-page-tag">p.7</span></button>
+      <button class="toc-entry" onclick="jumpTo(this, 9)">6 Results <span class="toc-page-tag">p.9</span></button>
+      <button class="toc-entry" onclick="jumpTo(this, 11)">7 Conclusion <span class="toc-page-tag">p.11</span></button>
+    </div>
+  </aside>
+
+  <!-- PDF Panel -->
+  <div class="pdf-panel">
+    <div class="pdf-viewport" id="pdfViewport">
+      <div class="pdf-page-wrapper" id="pdfPageWrapper">
+        <div class="pdf-page" id="pdfPage">
+          <div class="pdf-h1">Attention Is All You Need</div>
+          <div class="pdf-authors">Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones,<br>Aidan N. Gomez, Łukasz Kaiser, Illia Polosukhin</div>
+
+          <div class="pdf-h2">Abstract</div>
+          <div class="pdf-p pdf-abstract">The dominant sequence transduction models are based on complex recurrent or convolutional neural networks that include an encoder and a decoder. The best performing models also connect the encoder and decoder through an attention mechanism. We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely.</div>
+
+          <div class="pdf-h2">1 Introduction</div>
+          <div class="pdf-p">Recurrent neural networks, long short-term memory and gated recurrent neural networks in particular, have been firmly established as state of the art approaches in sequence modeling and transduction problems such as language modeling and machine translation. Numerous efforts have since continued to push the boundaries of recurrent language models and encoder-decoder architectures.</div>
+          <div class="pdf-p">Recurrent models typically factor computation along the symbol positions of the input and output sequences. Aligning the positions to steps in computation time, they generate a sequence of hidden states h_t, as a function of the previous hidden state h_{t-1} and the input for position t. This inherently sequential nature precludes parallelization within training examples, which becomes critical at longer sequence lengths, as memory constraints limit batching across examples.</div>
+
+          <div class="pdf-h2">2 Background</div>
+          <div class="pdf-p">The goal of reducing sequential computation also forms the foundation of the Extended Neural GPU, ByteNet and ConvS2S, all of which use convolutional neural networks as basic building block, computing hidden representations in parallel for all input and output positions. In these models, the number of operations required to relate signals from two arbitrary input or output positions grows in the distance between positions, linearly for ConvS2S and logarithmically for ByteNet.</div>
+
+          <div class="pdf-fig">
+            <div style="color:#999;font-size:10px;padding:16px">[Figure 1: The Transformer — model architecture]</div>
+            <div class="pdf-fig-caption">Figure 1: (left) The Transformer architecture. (right) Multi-Head Attention consists of several attention layers running in parallel.</div>
+          </div>
+
+          <div class="pdf-h2">3 Model Architecture</div>
+          <div class="pdf-p">Most competitive neural sequence transduction models have an encoder-decoder structure. Here, the encoder maps an input sequence of symbol representations (x₁, ..., x_n) to a sequence of continuous representations z = (z₁, ..., z_n). Given z, the decoder then generates an output sequence (y₁, ..., y_m) of symbols one element at a time.</div>
+
+          <div class="pdf-eq">Attention(Q, K, V) = softmax(QK^T / √d_k) V</div>
+
+          <div class="pdf-page-num">9</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Parse Panel -->
+  <div class="parse-panel" id="parsePanel">
+    <div class="parse-header">
+      <span class="parse-header-label">解析内容</span>
+      <span class="parse-header-page">— 第 9 页</span>
+      <div class="parse-view-toggle">
+        <button class="parse-view-btn active" onclick="switchParseView(this, 'parsed')">解析文</button>
+        <button class="parse-view-btn" onclick="switchParseView(this, 'translated')">翻译文</button>
+      </div>
+    </div>
+    <div class="parse-body">
+
+      <!-- Chunk 1: Heading + paragraph -->
+      <div class="parse-chunk">
+        <div class="parse-chunk-header">
+          <span class="parse-chunk-label">Chunk 1 <span class="chunk-type">heading + text</span></span>
+          <div class="parse-chunk-actions">
+            <button class="chunk-action-btn" onclick="translateChunk(this)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/></svg>
+              翻译成中文
+            </button>
+          </div>
+        </div>
+        <div class="parse-chunk-content">
+          <h3>6 Results</h3>
+          <p>Machine translation: On the WMT 2014 English-to-German translation task, the big transformer model (Transformer (big) in Table 2) outperforms the best previously reported models (including ensembles) by more than 2.0 BLEU, establishing a new state-of-the-art BLEU score of 28.4.</p>
+        </div>
+        <div class="parse-translation" id="trans-1">
+          <div class="parse-translation-header">
+            <span class="parse-translation-label">翻译结果 · GPT-4o</span>
+            <div style="margin-left:auto;display:flex;gap:4px">
+              <button class="chunk-action-btn" onclick="showToast('重新翻译中…')">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
+                重新翻译
+              </button>
+            </div>
+          </div>
+          <p>机器翻译：在 WMT 2014 英德翻译任务上，大型 Transformer 模型（表 2 中的 Transformer (big)）超越了此前报道的所有最佳模型（包括集成模型），BLEU 得分提高了 2.0 以上，以 28.4 的 BLEU 分数创下了新的最优纪录。</p>
+        </div>
+      </div>
+
+      <!-- Chunk 2: Table -->
+      <div class="parse-chunk">
+        <div class="parse-chunk-header">
+          <span class="parse-chunk-label">Chunk 2 <span class="chunk-type">table</span></span>
+          <div class="parse-chunk-actions">
+            <button class="chunk-action-btn" onclick="translateChunk(this)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/></svg>
+              翻译成中文
+            </button>
+          </div>
+        </div>
+        <div class="parse-chunk-content">
+          <div class="table-block">
+            <table>
+              <thead>
+                <tr><th>Model</th><th>BLEU (EN-DE)</th><th>BLEU (EN-FR)</th><th>Training Cost (FLOPs)</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>GNMT + RL</td><td>24.6</td><td>39.92</td><td>2.3 × 10¹⁹</td></tr>
+                <tr><td>ConvS2S</td><td>25.16</td><td>40.46</td><td>7.7 × 10¹⁸</td></tr>
+                <tr><td>Transformer (base)</td><td>27.3</td><td>38.1</td><td>3.3 × 10¹⁸</td></tr>
+                <tr><td style="color:var(--coral);font-weight:500">Transformer (big)</td><td style="color:var(--coral);font-weight:500">28.4</td><td style="color:var(--coral);font-weight:500">41.0</td><td>2.3 × 10¹⁹</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="parse-translation" id="trans-2">
+          <div class="parse-translation-header">
+            <span class="parse-translation-label">翻译结果 · GPT-4o</span>
+            <div style="margin-left:auto;display:flex;gap:4px">
+              <button class="chunk-action-btn" onclick="showToast('重新翻译中…')">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
+                重新翻译
+              </button>
+            </div>
+          </div>
+          <div class="table-block">
+            <table>
+              <thead>
+                <tr><th>模型</th><th>BLEU (英德)</th><th>BLEU (英法)</th><th>训练成本 (浮点运算)</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>GNMT + RL</td><td>24.6</td><td>39.92</td><td>2.3 × 10¹⁹</td></tr>
+                <tr><td>ConvS2S</td><td>25.16</td><td>40.46</td><td>7.7 × 10¹⁸</td></tr>
+                <tr><td>Transformer (基础)</td><td>27.3</td><td>38.1</td><td>3.3 × 10¹⁸</td></tr>
+                <tr><td style="color:var(--coral);font-weight:500">Transformer (大型)</td><td style="color:var(--coral);font-weight:500">28.4</td><td style="color:var(--coral);font-weight:500">41.0</td><td>2.3 × 10¹⁹</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chunk 3: Paragraph -->
+      <div class="parse-chunk">
+        <div class="parse-chunk-header">
+          <span class="parse-chunk-label">Chunk 3 <span class="chunk-type">text</span></span>
+          <div class="parse-chunk-actions">
+            <button class="chunk-action-btn" onclick="translateChunk(this)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/></svg>
+              翻译成中文
+            </button>
+          </div>
+        </div>
+        <div class="parse-chunk-content">
+          <p>The configuration of the big transformer model was: d_model = 1024, d_ff = 4096, h = 16, N = 6, with 212M parameters. Training took 3.5 days on 8 P100 GPUs. The cost of training is significantly lower than previous work.</p>
+          <p>English constituency parsing: To evaluate if the Transformer can generalize to other tasks, we performed experiments on English constituency parsing. Despite the lack of task-specific tuning, the Transformer performs remarkably well, yielding better results than all previously reported models with the exception of the RNN Grammar.</p>
+        </div>
+        <div class="parse-translation" id="trans-3">
+          <div class="parse-translation-header">
+            <span class="parse-translation-label">翻译结果 · GPT-4o</span>
+            <div style="margin-left:auto;display:flex;gap:4px">
+              <button class="chunk-action-btn" onclick="showToast('重新翻译中…')">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
+                重新翻译
+              </button>
+            </div>
+          </div>
+          <p>大型 Transformer 模型的配置为：d_model = 1024，d_ff = 4096，h = 16，N = 6，共 2.12 亿参数。在 8 块 P100 GPU 上训练耗时 3.5 天。训练成本显著低于此前的工作。</p>
+          <p>英语成分句法分析：为了评估 Transformer 是否可以推广到其他任务，我们在英语成分句法分析上进行了实验。尽管缺乏任务特定的调优，Transformer 的表现依然非常出色，产生了比此前所有已报道模型更好的结果（RNN Grammar 除外）。</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Q&A Panel -->
+  <div class="qa-panel collapsed" id="qaPanel">
+    <div class="qa-header">
+      <span class="qa-header-title">论文问答</span>
+      <span class="qa-header-model">GPT-4o</span>
+      <button class="qa-header-close" onclick="toggleQA()">×</button>
+    </div>
+
+    <div class="qa-quick-actions">
+      <button class="qa-quick-btn" onclick="quickAsk('总结这篇论文的核心贡献')">总结核心贡献</button>
+      <button class="qa-quick-btn" onclick="quickAsk('解释 Multi-Head Attention')">解释注意力机制</button>
+      <button class="qa-quick-btn" onclick="quickAsk('这篇论文的实验结果如何？')">实验结果</button>
+    </div>
+
+    <div class="qa-messages" id="qaMessages">
+      <div class="qa-msg user">
+        <div class="qa-msg-label">你</div>
+        <div class="qa-msg-bubble">这篇论文的核心贡献是什么？Transformer 架构相比 RNN 有什么优势？</div>
+      </div>
+      <div class="qa-msg assistant">
+        <div class="qa-msg-label">AI · 引用 p.1, p.3</div>
+        <div class="qa-msg-citation">
+          <div class="qa-msg-citation-page">p.1 Abstract</div>
+          "We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely."
+        </div>
+        <div class="qa-msg-bubble">
+          这篇论文的核心贡献是提出了 <strong>Transformer 架构</strong>，它完全基于注意力机制，摒弃了循环和卷积结构。相比 RNN 的主要优势：<br><br>
+          1. <strong>并行计算</strong>：RNN 必须按序列顺序逐步计算，而 Transformer 的自注意力可以并行处理所有位置<br>
+          2. <strong>长距离依赖</strong>：RNN 中信息需要经过多步传递，Transformer 的自注意力可以直接建模任意两个位置之间的关系，路径长度为 O(1)<br>
+          3. <strong>训练效率</strong>：实验显示 Transformer 在 8 块 P100 GPU 上仅需 3.5 天即可训练完成
+        </div>
+        <div class="qa-msg-actions">
+          <button class="qa-msg-action" onclick="showToast('已复制')">复制</button>
+          <button class="qa-msg-action" onclick="showToast('已跳转到原文 p.1')">跳转原文</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="qa-input-area">
+      <div class="qa-input-row">
+        <textarea class="qa-input" rows="1" placeholder="针对论文内容提问…"></textarea>
+        <button class="qa-send-btn" onclick="showToast('发送中…')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </button>
+      </div>
+      <div class="qa-input-footer">
+        <span>基于论文全文 + 翻译内容回答</span>
+        <span>2,450 tokens</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Parse Engine Modal -->
+<div class="engine-overlay" id="engineModal">
+  <div class="engine-modal">
+    <div class="engine-modal-header">
+      <div class="engine-modal-title">选择解析引擎</div>
+      <button class="engine-modal-close" onclick="closeEngineModal()">×</button>
+    </div>
+    <div class="engine-list">
+      <div class="engine-item default selected" onclick="selectEngine(this)">
+        <div class="engine-radio"></div>
+        <div class="engine-info">
+          <div class="engine-name">PyMuPDF <span class="badge">内置</span></div>
+          <div class="engine-desc">轻量级文本提取，无需 ML 模型 · 15 MB · v1.24.0</div>
+        </div>
+      </div>
+      <div class="engine-item" onclick="selectEngine(this)">
+        <div class="engine-radio"></div>
+        <div class="engine-info">
+          <div class="engine-name">Marker <span class="badge">已安装</span></div>
+          <div class="engine-desc">高质量 PDF→Markdown，支持表格/公式/图片 · 1.5 GB · v0.18.0</div>
+        </div>
+      </div>
+      <div class="engine-item" onclick="selectEngine(this)">
+        <div class="engine-radio"></div>
+        <div class="engine-info">
+          <div class="engine-name">MinerU <span class="badge">已安装</span></div>
+          <div class="engine-desc">高质量 PDF 解析，支持复杂版面/公式/表格 · 2.0 GB · v1.2.0</div>
+        </div>
+      </div>
+    </div>
+    <div class="engine-modal-footer">
+      <button class="btn-modal btn-modal-ghost" onclick="closeEngineModal()">取消</button>
+      <button class="btn-modal btn-modal-accent" onclick="startParse()">开始解析</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toasts -->
+<div class="toast-container" id="toasts"></div>
+
+<!-- Hint Bar -->
+<div class="hint-bar">
+  <strong>交互说明：</strong>
+  左栏「目录」可折叠 | 中间 PDF 支持滚轮缩放+拖拽平移 | 右栏解析内容按 chunk 分段，每个 chunk 右上角手动翻译 | 解析文/翻译文可切换 | 右上角「问答」展开 AI 对话面板 | 底部页码导航翻页
+</div>
+
+<script>
+  // Zoom
+  let zoomLevel = 100;
+  function zoom(delta) {
+    zoomLevel = Math.max(50, Math.min(200, zoomLevel + delta));
+    document.getElementById('zoomValue').textContent = zoomLevel + '%';
+    document.getElementById('pdfPageWrapper').style.transform = `scale(${zoomLevel/100})`;
+    document.getElementById('pdfPageWrapper').style.transformOrigin = 'top center';
+  }
+  function zoomFit() { zoomLevel = 100; zoom(0); }
+
+  // Page nav
+  let currentPage = 9;
+  function prevPage() { if (currentPage > 1) { currentPage--; document.getElementById('pageInput').value = currentPage; } }
+  function nextPage() { if (currentPage < 15) { currentPage++; document.getElementById('pageInput').value = currentPage; } }
+  function goPage(p) { currentPage = Math.max(1, Math.min(15, parseInt(p))); document.getElementById('pageInput').value = currentPage; }
+
+  // TOC
+  function toggleToc() {
+    const sidebar = document.getElementById('tocSidebar');
+    sidebar.classList.toggle('collapsed');
+    document.getElementById('tocToggle').classList.toggle('active');
+  }
+  function jumpTo(el, page) {
+    document.querySelectorAll('.toc-entry').forEach(e => e.classList.remove('active'));
+    el.classList.add('active');
+    goPage(page);
+    showToast('跳转到第 ' + page + ' 页');
+  }
+
+  // Parse panel
+  function switchParseView(btn, view) {
+    document.querySelectorAll('.parse-view-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    if (view === 'translated') {
+      document.querySelectorAll('.parse-translation').forEach(t => t.classList.add('show'));
+      document.querySelectorAll('.parse-chunk-content').forEach(c => c.style.opacity = '0.4');
+    } else {
+      document.querySelectorAll('.parse-translation').forEach(t => t.classList.remove('show'));
+      document.querySelectorAll('.parse-chunk-content').forEach(c => c.style.opacity = '1');
+    }
+  }
+
+  // Translate chunk
+  function translateChunk(btn) {
+    const chunk = btn.closest('.parse-chunk');
+    const translation = chunk.querySelector('.parse-translation');
+    if (translation.classList.contains('show')) {
+      translation.classList.remove('show');
+      btn.classList.remove('translated');
+      btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/></svg> 翻译成中文';
+    } else {
+      translation.classList.add('show');
+      btn.classList.add('translated');
+      btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/></svg> 隐藏翻译';
+      showToast('翻译已显示');
+    }
+  }
+
+  // Q&A
+  function toggleQA() {
+    const panel = document.getElementById('qaPanel');
+    panel.classList.toggle('collapsed');
+  }
+  function quickAsk(q) {
+    const messages = document.getElementById('qaMessages');
+    const msg = document.createElement('div');
+    msg.className = 'qa-msg user';
+    msg.innerHTML = `<div class="qa-msg-label">你</div><div class="qa-msg-bubble">${q}</div>`;
+    messages.appendChild(msg);
+    messages.scrollTop = messages.scrollHeight;
+    showToast('AI 正在回答…');
+  }
+
+  // Parse engine modal
+  function openEngineModal() { document.getElementById('engineModal').classList.add('show'); }
+  function closeEngineModal() { document.getElementById('engineModal').classList.remove('show'); }
+  function selectEngine(el) {
+    document.querySelectorAll('.engine-item').forEach(e => e.classList.remove('selected'));
+    el.classList.add('selected');
+  }
+  function startParse() {
+    closeEngineModal();
+    showToast('正在使用 PyMuPDF 解析中…');
+  }
+
+  // Toast
+  function showToast(msg) {
+    const t = document.createElement('div');
+    t.className = 'toast';
+    t.textContent = msg;
+    document.getElementById('toasts').appendChild(t);
+    setTimeout(() => t.remove(), 3000);
+  }
+</script>
+
+</body>
+</html>

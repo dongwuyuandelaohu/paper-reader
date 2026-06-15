@@ -1,0 +1,74 @@
+{
+  "marker": {
+    "name": "Marker",
+    "description": "高质量 PDF 转 Markdown 引擎",
+    "version": "1.10.2",
+    "packages": {
+      "darwin-arm64": {
+        "url": "https://github.com/paper-reader/engines/releases/download/marker-1.10.2/marker-engine-darwin-arm64.tar.gz",
+        "sha256": "placeholder_sha256_hash",
+        "size_mb": 6.8,
+        "binary": "marker-engine"
+      },
+      "darwin-x86_64": {
+        "url": "https://github.com/paper-reader/engines/releases/download/marker-1.10.2/marker-engine-darwin-x86_64.tar.gz",
+        "sha256": "placeholder_sha256_hash",
+        "size_mb": 7.2,
+        "binary": "marker-engine"
+      },
+      "linux-x86_64": {
+        "url": "https://github.com/paper-reader/engines/releases/download/marker-1.10.2/marker-engine-linux-x86_64.tar.gz",
+        "sha256": "placeholder_sha256_hash",
+        "size_mb": 8.5,
+        "binary": "marker-engine"
+      },
+      "windows-x86_64": {
+        "url": "https://github.com/paper-reader/engines/releases/download/marker-1.10.2/marker-engine-windows-x86_64.zip",
+        "sha256": "placeholder_sha256_hash",
+        "size_mb": 7.8,
+        "binary": "marker-engine.exe"
+      }
+    },
+    "fallback_pip_package": "marker-pdf==1.10.2",
+    "requirements": {
+      "python": ">=3.8,<3.12",
+      "system": "Requires Python environment with marker-pdf installed"
+    }
+  },
+  "mineru": {
+    "name": "MinerU",
+    "description": "高精度文档解析引擎",
+    "version": "3.2.1",
+    "packages": {
+      "darwin-arm64": {
+        "url": "https://github.com/paper-reader/engines/releases/download/mineru-3.2.1/mineru-engine-darwin-arm64.tar.gz",
+        "sha256": "placeholder_sha256_hash",
+        "size_mb": 15.2,
+        "binary": "mineru-engine"
+      },
+      "darwin-x86_64": {
+        "url": "https://github.com/paper-reader/engines/releases/download/mineru-3.2.1/mineru-engine-darwin-x86_64.tar.gz",
+        "sha256": "placeholder_sha256_hash",
+        "size_mb": 16.1,
+        "binary": "mineru-engine"
+      },
+      "linux-x86_64": {
+        "url": "https://github.com/paper-reader/engines/releases/download/mineru-3.2.1/mineru-engine-linux-x86_64.tar.gz",
+        "sha256": "placeholder_sha256_hash",
+        "size_mb": 18.3,
+        "binary": "mineru-engine"
+      },
+      "windows-x86_64": {
+        "url": "https://github.com/paper-reader/engines/releases/download/mineru-3.2.1/mineru-engine-windows-x86_64.zip",
+        "sha256": "placeholder_sha256_hash",
+        "size_mb": 16.8,
+        "binary": "mineru-engine.exe"
+      }
+    },
+    "fallback_pip_package": "mineru==3.2.1",
+    "requirements": {
+      "python": ">=3.8,<3.12",
+      "system": "Requires Python environment with mineru installed"
+    }
+  }
+}
