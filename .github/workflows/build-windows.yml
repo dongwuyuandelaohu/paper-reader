@@ -44,19 +44,35 @@ jobs:
       run: |
         Write-Host "=== Starting PyInstaller build ==="
         Write-Host "Current directory: $(Get-Location)"
-        Write-Host "Checking for spec file..."
-        if (Test-Path "main.spec") {
-            Write-Host "✓ Found main.spec"
-            pyinstaller main.spec --clean --noconfirm
+        Write-Host "Files in current directory:"
+        Get-ChildItem -Name
+        Write-Host ""
+        
+        pyinstaller main.spec --clean --noconfirm 2>&1 | Tee-Object -Variable pyinstallerOutput
+        $exitCode = $LASTEXITCODE
+        
+        Write-Host ""
+        Write-Host "=== PyInstaller exit code: $exitCode ==="
+        Write-Host ""
+        
+        Write-Host "=== Checking dist directory ==="
+        if (Test-Path "dist") {
+            Get-ChildItem -Path "dist" -Recurse | ForEach-Object { Write-Host $_.FullName }
         } else {
-            Write-Host "✗ No spec file, using command line"
-            pyinstaller --name main --onefile main.py
+            Write-Host "dist directory does not exist!"
         }
-        Write-Host "=== PyInstaller build completed ==="
-        if ($LASTEXITCODE -ne 0) {
-            Write-Error "PyInstaller failed with exit code $LASTEXITCODE"
-            exit $LASTEXITCODE
+        
+        if ($exitCode -ne 0) {
+            Write-Error "PyInstaller failed with exit code $exitCode"
+            exit $exitCode
         }
+        
+        if (-not (Test-Path "dist/main.exe")) {
+            Write-Error "dist/main.exe was not created!"
+            exit 1
+        }
+        
+        Write-Host "✓ Build successful: dist/main.exe"
       working-directory: ./backend
       shell: pwsh
     
@@ -70,10 +86,10 @@ jobs:
             exit 1
         }
         Write-Host "=== Checking for main.exe ==="
-        if (Test-Path "backend/dist/main/main.exe") {
-            Write-Host "✓ Found backend/dist/main/main.exe"
+        if (Test-Path "backend/dist/main.exe") {
+            Write-Host "✓ Found backend/dist/main.exe"
         } else {
-            Write-Error "backend/dist/main/main.exe not found!"
+            Write-Error "backend/dist/main.exe not found!"
             exit 1
         }
       shell: pwsh
@@ -81,10 +97,7 @@ jobs:
     - name: Copy backend to Tauri resources
       run: |
         New-Item -ItemType Directory -Force -Path "src-tauri/resources/backend" | Out-Null
-        Copy-Item -Path "backend/dist/main/main.exe" -Destination "src-tauri/resources/backend/" -Force
-        if (Test-Path "backend/dist/main/_internal") {
-            Copy-Item -Path "backend/dist/main/_internal" -Destination "src-tauri/resources/backend/" -Recurse -Force
-        }
+        Copy-Item -Path "backend/dist/main.exe" -Destination "src-tauri/resources/backend/" -Force
       shell: pwsh
     
     - name: Build Tauri app
