@@ -41,16 +41,23 @@ jobs:
       working-directory: ./backend
     
     - name: Build backend executable
+      run: pyinstaller --name main --onefile --noconsole main.py
+      working-directory: ./backend
+      shell: pwsh
+    
+    - name: List backend dist contents
       run: |
-        cd backend
-        pyinstaller --name main --onefile --noconsole main.py
+        Write-Host "=== backend/dist contents ==="
+        Get-ChildItem -Path "backend/dist" -Recurse -Depth 2 | Select-Object FullName
       shell: pwsh
     
     - name: Copy backend to Tauri resources
       run: |
-        mkdir -p src-tauri/resources/backend
-        Copy-Item -Path "backend/dist/main/main.exe" -Destination "src-tauri/resources/backend/"
-        Copy-Item -Path "backend/dist/main/_internal/*" -Destination "src-tauri/resources/backend/" -Recurse -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Force -Path "src-tauri/resources/backend" | Out-Null
+        Copy-Item -Path "backend/dist/main/main.exe" -Destination "src-tauri/resources/backend/" -Force
+        if (Test-Path "backend/dist/main/_internal") {
+            Copy-Item -Path "backend/dist/main/_internal" -Destination "src-tauri/resources/backend/" -Recurse -Force
+        }
       shell: pwsh
     
     - name: Build Tauri app
