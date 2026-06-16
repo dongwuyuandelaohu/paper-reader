@@ -6,8 +6,12 @@ import type {
 
 const BASE = '/api/v1'
 
+// 开发环境使用相对路径（Vite 代理），生产环境使用绝对路径
+const isDev = import.meta.env.DEV
+const API_BASE = isDev ? '/api/v1' : 'http://localhost:8765/api/v1'
+
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(BASE + url, {
+  const res = await fetch(API_BASE + url, {
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     ...options,
   })
@@ -20,7 +24,7 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 
 function sseStream(url: string, options?: RequestInit): AsyncGenerator<SSEEvent> {
   const generator = async function* () {
-    const res = await fetch(BASE + url, {
+    const res = await fetch(API_BASE + url, {
       headers: { 'Content-Type': 'application/json', ...options?.headers },
       ...options,
     })
@@ -75,7 +79,7 @@ export const papers = {
       method: 'PUT',
       body: JSON.stringify({ page, scroll }),
     }),
-  getFileUrl: (id: string) => `${BASE}/papers/${id}/file`,
+  getFileUrl: (id: string) => `${API_BASE}/papers/${id}/file`,
 }
 
 // ===== Parse =====
@@ -90,7 +94,7 @@ export const parse = {
     return request<ParseStatus>(`/parse/${paperId}/parse/status${params}`)
   },
   stream: (paperId: string): EventSource => {
-    return new EventSource(`/api/v1/parse/${paperId}/parse/stream`)
+    return new EventSource(`${API_BASE}/parse/${paperId}/parse/stream`)
   },
   getPages: (paperId: string, engine?: string) => {
     const params = engine ? `?engine=${encodeURIComponent(engine)}` : ''
@@ -101,14 +105,14 @@ export const parse = {
     return request<ParsedPage>(`/parse/${paperId}/pages/${pageNumber}${params}`)
   },
   getImageUrl: (paperId: string, filename: string) =>
-    `${BASE}/parse/${paperId}/images/${filename}`,
+    `${API_BASE}/parse/${paperId}/images/${filename}`,
 }
 
 // ===== Translate =====
 export const translate = {
   translatePage: async (paperId: string, pageNumber: number, modelId?: string, engine?: string, force?: boolean): Promise<AsyncGenerator<SSEEvent>> => {
     // The backend may return cached JSON (not SSE), so we need to handle both
-    const res = await fetch(`/api/v1/translate/${paperId}/pages/${pageNumber}`, {
+    const res = await fetch(`${API_BASE}/translate/${paperId}/pages/${pageNumber}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model_id: modelId, engine, force: force || false }),
