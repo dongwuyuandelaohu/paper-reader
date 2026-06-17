@@ -1,12 +1,13 @@
 """
 MinerU 解析引擎
-使用 mineru CLI (v3.x) 将 PDF 转为高质量 Markdown
+优先使用独立打包的引擎，回退到系统安装的 mineru
 """
 
 import json
 import re
 import shutil
 import subprocess
+import sys
 import logging
 from pathlib import Path
 from typing import Optional
@@ -24,15 +25,56 @@ class MinerUEngine:
         if self.output_dir:
             self.output_dir.mkdir(parents=True, exist_ok=True)
 
+    def _find_mineru_executable(self) -> Optional[str]:
+        """查找 mineru 可执行文件（优先独立打包版本）"""
+        # 1. 检查独立打包的引擎（用户目录）
+        user_engines_dir = Path.home() / ".paperlens" / "engines"
+        isolated_mineru = user_engines_dir / "mineru-engine"
+        if sys.platform == "win32":
+            # Windows: 优先 .exe (PyInstaller)，回退到 .bat (venv wrapper)
+            for ext in [".exe", ".bat"]:
+                exe = isolated_mineru / f"mineru-engine{ext}"
+                if exe.exists():
+                    logger.info(f"[MINERU] 使用独立打包的引擎: {exe}")
+                    return str(exe)
+        else:
+            exe = isolated_mineru / "mineru-engine"
+            if exe.exists():
+                logger.info(f"[MINERU] 使用独立打包的引擎: {exe}")
+                return str(exe)
+
+        # 2. 检查独立打包的引擎（应用目录）
+        app_dir = Path(__file__).parent.parent.parent
+        app_mineru = app_dir / "engines" / "mineru-engine"
+        if sys.platform == "win32":
+            for ext in [".exe", ".bat"]:
+                exe = app_mineru / f"mineru-engine{ext}"
+                if exe.exists():
+                    logger.info(f"[MINERU] 使用应用目录的引擎: {exe}")
+                    return str(exe)
+        else:
+            exe = app_mineru / "mineru-engine"
+            if exe.exists():
+                logger.info(f"[MINERU] 使用应用目录的引擎: {exe}")
+                return str(exe)
+
+        # 3. 回退到系统安装的 mineru
+        system_mineru = shutil.which("mineru")
+        if system_mineru:
+            logger.info(f"[MINERU] 使用系统安装的引擎: {system_mineru}")
+            return system_mineru
+
+        return None
+
     def parse_all(self, pdf_path: str, paper_id: str = "") -> list[dict]:
         """解析全部页面"""
         if not self.output_dir:
             raise ValueError("MinerU 引擎需要指定输出目录")
 
-        mineru_cmd = shutil.which("mineru")
+        mineru_cmd = self._find_mineru_executable()
         if not mineru_cmd:
             raise RuntimeError(
-                "MinerU CLI 未找到。请执行: pip install mineru\n"
+                "MinerU CLI 未找到。请在应用内下载引擎，或执行: pip install mineru\n"
                 "安装后确保 mineru 命令在 PATH 中"
             )
 
@@ -59,9 +101,9 @@ class MinerUEngine:
 
             if result.returncode != 0:
                 logger.error(f"[MINERU] Failed (code {result.returncode})")
-                logger.error(f"[MINERU] STDERR: {result.stderr[:1000]}")
-                logger.error(f"[MINERU] STDOUT: {result.stdout[:1000]}")
-                raise RuntimeError(f"MinerU 执行失败: {result.stderr[:500]}")
+                logger.error(f"[MINERU] STDERR: {result.stderr[:2000]}")
+                logger.error(f"[MINERU] STDOUT: {result.stdout[:2000]}")
+                raise RuntimeError(f"MinerU 执行失败 (code {result.returncode}): {result.stderr[:2000]}")
 
             logger.info(f"[MINERU] Success")
             logger.info(f"[MINERU] STDOUT: {result.stdout[:500]}")

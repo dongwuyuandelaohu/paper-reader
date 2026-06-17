@@ -230,14 +230,20 @@ export default function Reader() {
   const [showFullMarkdown, setShowFullMarkdown] = useState(false)
   const [pageInputValue, setPageInputValue] = useState('')
 
-  // ── 加载策略：最小化初始请求，PDF 优先 ──
-  // Mount 时只发 1 个请求：papers.get(id) → PDF 立即渲染
-  // 其他请求按需加载：打开解析面板时才加载解析数据，打开引擎弹窗时才加载模型/引擎列表
+  // ── 加载策略：PDF 优先，同时检测后台解析状态 ──
   useEffect(() => {
     if (!id) return
     reader.loadPaper(id)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
+
+  // 进入 Reader 后始终检查解析状态（检测后台解析/翻译进度，自动恢复面板）
+  useEffect(() => {
+    if (reader.paper) {
+      reader.loadParseData(reader.paper.id)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reader.paper?.id])
 
   // Sync page input
   useEffect(() => { setPageInputValue(String(reader.currentPage)) }, [reader.currentPage])
@@ -247,7 +253,7 @@ export default function Reader() {
   const showParsePanel = reader.parsePanelOpen || reader.parsing
   const showQAPanel = reader.qaPanelOpen
 
-  // 当打开解析面板时，才加载解析数据
+  // 当打开解析面板时，加载完整解析数据
   useEffect(() => {
     if (showParsePanel && reader.paper) {
       reader.loadParseData(reader.paper.id)
@@ -357,10 +363,9 @@ export default function Reader() {
     else setPageInputValue(String(reader.currentPage))
   }
 
-  // Per-page translation state
-  const [translatingPage, setTranslatingPage] = useState<number | null>(null)
+  // 翻译操作 — 翻译状态从 store 的 translatingPages 派生（不依赖局部 state）
   const handleTranslatePage = useCallback(async (pageNumber: number, force = false) => {
-    if (!reader.paper || translatingPage !== null) return
+    if (!reader.paper) return
     
     const engine = reader.currentEngine || 'pymupdf'
     const pageKey = `${reader.paper.id}:${pageNumber}:${engine}`
@@ -371,14 +376,11 @@ export default function Reader() {
       return
     }
     
-    setTranslatingPage(pageNumber)
     showToast(`开始翻译第 ${pageNumber} 页，可在后台继续浏览`)
     
     // 启动后台翻译（不阻塞）
-    reader.translateCurrentPage(undefined, pageNumber, force).finally(() => {
-      setTranslatingPage(null)
-    })
-  }, [reader, translatingPage, showToast])
+    reader.translateCurrentPage(undefined, pageNumber, force)
+  }, [reader, showToast])
 
   // Parse trigger
   const handleStartParse = useCallback(() => {
@@ -791,6 +793,8 @@ export default function Reader() {
               ) : isParsed && reader.pages.length > 0 ? (
                 reader.pages.map((page) => {
                   const pageTranslation = reader.translations[page.page_number]
+                  const pageKey = `${reader.paper!.id}:${page.page_number}:${reader.currentEngine || 'pymupdf'}`
+                  const isTranslating = reader.translatingPages.has(pageKey)
                   return (
                     <ParsePageChunk
                       key={page.page_number}
@@ -799,7 +803,7 @@ export default function Reader() {
                       translation={pageTranslation}
                       onTranslate={() => handleTranslatePage(page.page_number)}
                       onRetranslate={() => handleTranslatePage(page.page_number, true)}
-                      translating={translatingPage === page.page_number}
+                      translating={isTranslating}
                     />
                   )
                 })

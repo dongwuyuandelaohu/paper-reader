@@ -16,6 +16,7 @@ build-engines/dist/
 build-engines/venv-*/
 build-engines/.pyinstaller-*/
 build-engines/build/
+build-engines/isolated-build/
 
 # IDE
 .vscode/

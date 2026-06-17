@@ -124,6 +124,7 @@ export interface ParseStatus {
   pages_parsed: number
   current_engine: string | null
   cached_engines: Record<string, number>
+  thread_running: boolean
   job: ParseJob | null
   page_statuses: Record<string, string>
 }

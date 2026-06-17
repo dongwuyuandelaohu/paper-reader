@@ -1,10 +1,12 @@
 """
 Marker 解析引擎
-使用 marker_single 将 PDF 转为高质量 Markdown
+优先使用独立打包的引擎，回退到系统安装的 marker_single
 """
 
+import os
 import re
 import json
+import sys
 import shutil
 import subprocess
 import logging
@@ -24,14 +26,48 @@ class MarkerEngine:
         if self.output_dir:
             self.output_dir.mkdir(parents=True, exist_ok=True)
 
+    def _find_marker_executable(self) -> Optional[str]:
+        """查找 marker 可执行文件（优先独立打包版本）"""
+        # 1. 检查独立打包的引擎（用户目录）
+        user_engines_dir = Path.home() / ".paperlens" / "engines"
+        isolated_marker = user_engines_dir / "marker-engine"
+        if sys.platform == "win32":
+            isolated_marker_exe = isolated_marker / "marker-engine.exe"
+        else:
+            isolated_marker_exe = isolated_marker / "marker-engine"
+        
+        if isolated_marker_exe.exists():
+            logger.info(f"[MARKER] 使用独立打包的引擎: {isolated_marker_exe}")
+            return str(isolated_marker_exe)
+
+        # 2. 检查独立打包的引擎（应用目录）
+        app_dir = Path(__file__).parent.parent.parent
+        app_marker = app_dir / "engines" / "marker-engine"
+        if sys.platform == "win32":
+            app_marker_exe = app_marker / "marker-engine.exe"
+        else:
+            app_marker_exe = app_marker / "marker-engine"
+        
+        if app_marker_exe.exists():
+            logger.info(f"[MARKER] 使用应用目录的引擎: {app_marker_exe}")
+            return str(app_marker_exe)
+
+        # 3. 回退到系统安装的 marker_single
+        system_marker = shutil.which("marker_single")
+        if system_marker:
+            logger.info(f"[MARKER] 使用系统安装的引擎: {system_marker}")
+            return system_marker
+
+        return None
+
     def parse_all(self, pdf_path: str, paper_id: str = "") -> list[dict]:
         """解析全部页面"""
         if not self.output_dir:
             raise ValueError("Marker 引擎需要指定输出目录")
 
-        marker_cmd = shutil.which("marker_single")
+        marker_cmd = self._find_marker_executable()
         if not marker_cmd:
-            raise RuntimeError("Marker 未安装。请执行: pip install marker-pdf")
+            raise RuntimeError("Marker 未安装。请在应用内下载引擎，或执行: pip install marker-pdf")
 
         temp_output = self.output_dir / "marker_temp"
         if temp_output.exists():
@@ -39,6 +75,7 @@ class MarkerEngine:
         temp_output.mkdir(parents=True)
 
         try:
+            # 构建命令
             cmd = [
                 marker_cmd,
                 pdf_path,
@@ -46,6 +83,10 @@ class MarkerEngine:
                 "--output_format", "markdown",
                 "--paginate_output",
             ]
+            
+            # 如果是独立打包的引擎，自动添加单进程参数
+            if "marker-engine" in marker_cmd and "--disable_multiprocessing" not in cmd:
+                cmd.append("--disable_multiprocessing")
 
             logger.info(f"[MARKER] Command: {' '.join(cmd)}")
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)

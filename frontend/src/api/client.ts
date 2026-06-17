@@ -4,8 +4,6 @@ import type {
   Engine, Settings, SSEEvent
 } from './types'
 
-const BASE = '/api/v1'
-
 // 开发环境使用相对路径（Vite 代理），生产环境使用绝对路径
 const isDev = import.meta.env.DEV
 const API_BASE = isDev ? '/api/v1' : 'http://localhost:8765/api/v1'

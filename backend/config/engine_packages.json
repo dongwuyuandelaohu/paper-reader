@@ -5,27 +5,27 @@
     "version": "1.10.2",
     "packages": {
       "darwin-arm64": {
-        "url": "https://github.com/paper-reader/engines/releases/download/marker-1.10.2/marker-engine-darwin-arm64.tar.gz",
+        "url": "https://github.com/paper-reader/engines/releases/download/marker-1.10.2/marker-engine-darwin-arm64.zip",
         "sha256": "placeholder_sha256_hash",
-        "size_mb": 6.8,
+        "size_mb": 1500,
         "binary": "marker-engine"
       },
       "darwin-x86_64": {
-        "url": "https://github.com/paper-reader/engines/releases/download/marker-1.10.2/marker-engine-darwin-x86_64.tar.gz",
+        "url": "https://github.com/paper-reader/engines/releases/download/marker-1.10.2/marker-engine-darwin-x86_64.zip",
         "sha256": "placeholder_sha256_hash",
-        "size_mb": 7.2,
+        "size_mb": 1600,
         "binary": "marker-engine"
       },
       "linux-x86_64": {
-        "url": "https://github.com/paper-reader/engines/releases/download/marker-1.10.2/marker-engine-linux-x86_64.tar.gz",
+        "url": "https://github.com/paper-reader/engines/releases/download/marker-1.10.2/marker-engine-linux-x86_64.zip",
         "sha256": "placeholder_sha256_hash",
-        "size_mb": 8.5,
+        "size_mb": 1700,
         "binary": "marker-engine"
       },
       "windows-x86_64": {
         "url": "https://github.com/paper-reader/engines/releases/download/marker-1.10.2/marker-engine-windows-x86_64.zip",
         "sha256": "placeholder_sha256_hash",
-        "size_mb": 7.8,
+        "size_mb": 1500,
         "binary": "marker-engine.exe"
       }
     },
@@ -37,38 +37,38 @@
   },
   "mineru": {
     "name": "MinerU",
-    "description": "高精度文档解析引擎",
+    "description": "高精度文档解析引擎 (venv + wrapper)",
     "version": "3.2.1",
     "packages": {
       "darwin-arm64": {
-        "url": "https://github.com/paper-reader/engines/releases/download/mineru-3.2.1/mineru-engine-darwin-arm64.tar.gz",
-        "sha256": "placeholder_sha256_hash",
-        "size_mb": 15.2,
+        "url": "https://github.com/paper-reader/engines/releases/download/mineru-3.2.1/mineru-engine-darwin-arm64.zip",
+        "sha256": "6ff7b9b37bc309faa13c72cef3e5201d5391572d5ae77781847d699aec62bc6f",
+        "size_mb": 504,
         "binary": "mineru-engine"
       },
       "darwin-x86_64": {
-        "url": "https://github.com/paper-reader/engines/releases/download/mineru-3.2.1/mineru-engine-darwin-x86_64.tar.gz",
+        "url": "https://github.com/paper-reader/engines/releases/download/mineru-3.2.1/mineru-engine-darwin-x86_64.zip",
         "sha256": "placeholder_sha256_hash",
-        "size_mb": 16.1,
+        "size_mb": 3800,
         "binary": "mineru-engine"
       },
       "linux-x86_64": {
-        "url": "https://github.com/paper-reader/engines/releases/download/mineru-3.2.1/mineru-engine-linux-x86_64.tar.gz",
+        "url": "https://github.com/paper-reader/engines/releases/download/mineru-3.2.1/mineru-engine-linux-x86_64.zip",
         "sha256": "placeholder_sha256_hash",
-        "size_mb": 18.3,
+        "size_mb": 4000,
         "binary": "mineru-engine"
       },
       "windows-x86_64": {
         "url": "https://github.com/paper-reader/engines/releases/download/mineru-3.2.1/mineru-engine-windows-x86_64.zip",
         "sha256": "placeholder_sha256_hash",
-        "size_mb": 16.8,
-        "binary": "mineru-engine.exe"
+        "size_mb": 3500,
+        "binary": "mineru-engine.bat"
       }
     },
-    "fallback_pip_package": "mineru==3.2.1",
+    "fallback_pip_package": "mineru[all]==3.2.1",
     "requirements": {
-      "python": ">=3.8,<3.12",
-      "system": "Requires Python environment with mineru installed"
+      "python": ">=3.10,<=3.13",
+      "system": "Requires Python 3.10+ for venv wrapper to work"
     }
   }
 }

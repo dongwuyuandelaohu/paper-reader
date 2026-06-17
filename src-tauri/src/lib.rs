@@ -1,4 +1,4 @@
-use std::process::{Child, Command};
+use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use tauri::{Manager, Runtime};
 
@@ -44,14 +44,22 @@ pub fn run() {
 fn start_backend<R: Runtime>(app: &tauri::App<R>, process: Arc<Mutex<Option<Child>>>) -> Result<(), Box<dyn std::error::Error>> {
     // 获取应用资源目录
     let resource_dir = app.path().resource_dir()?;
+    log::info!("资源目录: {:?}", resource_dir);
+    
     let backend_exe = resource_dir.join("backend").join("main.exe");
+    log::info!("后端路径: {:?}", backend_exe);
+    log::info!("后端文件存在: {}", backend_exe.exists());
     
     // 如果 exe 不存在，尝试使用 Python 运行
     let child = if backend_exe.exists() {
         log::info!("启动后端: {:?}", backend_exe);
-        Command::new(&backend_exe)
+        let output = Command::new(&backend_exe)
             .current_dir(backend_exe.parent().unwrap())
-            .spawn()?
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()?;
+        log::info!("后端进程已启动, PID: {}", output.id());
+        output
     } else {
         // 开发模式：使用 Python 运行
         let backend_dir = std::env::current_dir()?.join("backend");
@@ -59,20 +67,29 @@ fn start_backend<R: Runtime>(app: &tauri::App<R>, process: Arc<Mutex<Option<Chil
         
         if !main_py.exists() {
             log::warn!("后端文件不存在: {:?}", main_py);
+            log::warn!("请确保后端文件已正确复制到资源目录");
             return Ok(());
         }
         
         log::info!("启动后端 (开发模式): python {:?}", main_py);
-        Command::new("python")
+        let output = Command::new("python")
             .arg(&main_py)
             .current_dir(&backend_dir)
-            .spawn()?
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()?;
+        log::info!("后端进程已启动 (开发模式), PID: {}", output.id());
+        output
     };
     
     // 保存进程引用
     *process.lock().unwrap() = Some(child);
     
-    log::info!("后端已启动");
+    // 等待后端启动
+    log::info!("等待后端启动 (3秒)...");
+    std::thread::sleep(std::time::Duration::from_secs(3));
+    
+    log::info!("后端启动完成");
     Ok(())
 }
 

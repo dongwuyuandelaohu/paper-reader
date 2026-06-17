@@ -8,6 +8,67 @@ let _pendingLoadPaperId: string | null = null
 let _pendingParseData: Promise<void> | null = null
 let _pendingParseDataId: string | null = null
 let _parseEventSource: EventSource | null = null
+let _currentPaperId: string | null = null
+let _readingPositionTimer: ReturnType<typeof setTimeout> | null = null
+
+/**
+ * 重连解析 SSE — 当返回页面时后端仍在解析，自动恢复实时进度推送
+ */
+function _reconnectParseSSE(paperId: string, engine: string) {
+  if (_parseEventSource) {
+    _parseEventSource.close()
+    _parseEventSource = null
+  }
+
+  useReaderStore.setState({ parsing: true })
+  _parseEventSource = parse.stream(paperId)
+
+  _parseEventSource.onmessage = async (event) => {
+    try {
+      const data = JSON.parse(event.data)
+      if (data.type === 'progress') {
+        useReaderStore.setState({ parseProgress: data.progress || 0 })
+      } else if (data.type === 'completed') {
+        useReaderStore.setState({ parsing: false, parseProgress: 1, currentEngine: engine })
+        await useReaderStore.getState().loadPages(engine)
+        const status = await parse.status(paperId, engine)
+        useReaderStore.setState({ parseStatus: status })
+        if (_parseEventSource) {
+          _parseEventSource.close()
+          _parseEventSource = null
+        }
+      } else if (data.type === 'error') {
+        useReaderStore.setState({ parsing: false })
+        const status = await parse.status(paperId, engine)
+        useReaderStore.setState({ parseStatus: status })
+        if (_parseEventSource) {
+          _parseEventSource.close()
+          _parseEventSource = null
+        }
+      }
+    } catch (err) {
+      console.error('Failed to parse SSE message:', err)
+    }
+  }
+
+  _parseEventSource.onerror = () => {
+    if (_parseEventSource) {
+      _parseEventSource.close()
+      _parseEventSource = null
+    }
+    parse.status(paperId, engine).then((status) => {
+      useReaderStore.setState({ parseStatus: status })
+      if (status.parse_status === 'parsed') {
+        useReaderStore.setState({ parsing: false, parseProgress: 1, currentEngine: engine })
+        useReaderStore.getState().loadPages(engine)
+      } else if (status.parse_status === 'failed') {
+        useReaderStore.setState({ parsing: false })
+      }
+    }).catch(() => {
+      useReaderStore.setState({ parsing: false })
+    })
+  }
+}
 
 interface ReaderStore {
   paper: Paper | null
@@ -72,28 +133,43 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
     
     _pendingLoadPaperId = id
     _pendingLoadPaper = (async () => {
-      // 切换论文时清空所有旧数据
-      set({
-        loading: true,
-        paper: null,
-        pages: [],
-        translations: {},
-        parseStatus: null,
-        parseProgress: 0,
-        parsing: false,
-        currentEngine: null,
-        currentPage: 1,
-      })
+      const isSamePaper = _currentPaperId === id && get().paper !== null
       
-      // Close any existing SSE connection
-      if (_parseEventSource) {
-        _parseEventSource.close()
-        _parseEventSource = null
+      if (!isSamePaper) {
+        // 切换到不同论文时才清空旧数据
+        set({
+          loading: true,
+          paper: null,
+          pages: [],
+          translations: {},
+          parseStatus: null,
+          parseProgress: 0,
+          parsing: false,
+          currentEngine: null,
+          currentPage: 1,
+        })
+        
+        // Close any existing SSE connection (only when switching papers)
+        if (_parseEventSource) {
+          _parseEventSource.close()
+          _parseEventSource = null
+        }
+      } else {
+        set({ loading: true })
       }
       
       try {
         const paper = await papers.get(id)
-        set({ paper, currentPage: 1, loading: false })
+        _currentPaperId = id
+        
+        if (isSamePaper) {
+          // 同一篇论文：只更新 paper 元数据，保留解析/翻译状态
+          set({ paper, loading: false })
+        } else {
+          // 新论文：恢复阅读位置
+          const savedPage = paper.reading_page || 1
+          set({ paper, currentPage: savedPage, loading: false })
+        }
       } catch (error) {
         set({ loading: false })
         throw error
@@ -109,11 +185,8 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
   // Load parse data separately - called when parse panel is opened or needed
   // 请求去重，防止 StrictMode 双重执行
   loadParseData: async (id) => {
-    const { paper, parseStatus } = get()
+    const { paper } = get()
     if (!paper || paper.id !== id) return
-    
-    // Skip if already loaded
-    if (parseStatus && get().pages.length > 0) return
     
     // 请求去重
     if (_pendingParseData && _pendingParseDataId === id) {
@@ -122,10 +195,17 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
     
     _pendingParseDataId = id
     _pendingParseData = (async () => {
+      // 始终从后端获取最新解析状态（不跳过）
       await Promise.all([
         get().loadPages().catch(() => {}),
         parse.status(id).then((status) => {
           set({ parseStatus: status, currentEngine: status.current_engine || null })
+          
+          // 如果后端仍在解析且当前没有 SSE 连接，自动重连
+          if (status.thread_running && !_parseEventSource) {
+            const engine = status.current_engine || 'pymupdf'
+            _reconnectParseSSE(id, engine)
+          }
         }).catch(() => {})
       ])
       _pendingParseData = null
@@ -142,14 +222,25 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
     const actualEngine = res.engine || engine || 'pymupdf'
     set({ pages: res.pages, currentEngine: actualEngine })
     
-    // 同时加载该引擎的翻译缓存
+    // 同时加载该引擎的翻译缓存（合并，不覆盖正在流式更新的翻译）
     try {
       const transRes = await translate.getAllTranslations(paper.id, actualEngine)
       const cachedTranslations: Record<number, string> = {}
       for (const [pageNum, data] of Object.entries(transRes.translations || {})) {
         cachedTranslations[Number(pageNum)] = data.content
       }
-      set({ translations: cachedTranslations })
+      // 合并：DB 缓存 + 已有的实时翻译数据（保留更完整的）
+      set((state) => {
+        const merged = { ...cachedTranslations }
+        for (const [pageNum, content] of Object.entries(state.translations)) {
+          const num = Number(pageNum)
+          // 如果实时数据比缓存更长（流式进行中），保留实时数据
+          if (content && (!merged[num] || content.length > merged[num].length)) {
+            merged[num] = content
+          }
+        }
+        return { translations: merged }
+      })
     } catch (e) {
       // 没有翻译缓存也不影响
       console.debug('No cached translations:', e)
@@ -157,8 +248,16 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
   },
 
   setCurrentPage: (page) => {
-    // 只更新本地状态，不调用 API
     set({ currentPage: page })
+    
+    // Debounce: 保存阅读位置到后端
+    if (_readingPositionTimer) clearTimeout(_readingPositionTimer)
+    _readingPositionTimer = setTimeout(() => {
+      const { paper } = get()
+      if (paper) {
+        papers.updateReadingPosition(paper.id, page).catch(() => {})
+      }
+    }, 1500)
   },
 
   translateCurrentPage: async (modelId, pageNumberOverride, forceRetranslate = false) => {
@@ -344,12 +443,6 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
   triggerParse: async (paperId, engine) => {
     set({ parsing: true, parseProgress: 0, parsePanelOpen: true, selectedEngine: engine })
     
-    // Close any existing SSE connection
-    if (_parseEventSource) {
-      _parseEventSource.close()
-      _parseEventSource = null
-    }
-    
     try {
       const result = await parse.trigger(paperId, engine)
       if (result.status === 'already_parsed') {
@@ -361,59 +454,8 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
         return
       }
       
-      // Connect to SSE stream for real-time progress
-      _parseEventSource = parse.stream(paperId)
-      
-      _parseEventSource.onmessage = async (event) => {
-        try {
-          const data = JSON.parse(event.data)
-          
-          if (data.type === 'progress') {
-            set({ parseProgress: data.progress || 0 })
-          } else if (data.type === 'completed') {
-            set({ parsing: false, parseProgress: 1, currentEngine: engine })
-            await get().loadPages(engine)
-            const status = await parse.status(paperId, engine)
-            set({ parseStatus: status })
-            // Close SSE connection
-            if (_parseEventSource) {
-              _parseEventSource.close()
-              _parseEventSource = null
-            }
-          } else if (data.type === 'error') {
-            set({ parsing: false })
-            const status = await parse.status(paperId, engine)
-            set({ parseStatus: status })
-            // Close SSE connection
-            if (_parseEventSource) {
-              _parseEventSource.close()
-              _parseEventSource = null
-            }
-          }
-        } catch (err) {
-          console.error('Failed to parse SSE message:', err)
-        }
-      }
-      
-      _parseEventSource.onerror = () => {
-        // SSE connection error - fall back to polling once
-        if (_parseEventSource) {
-          _parseEventSource.close()
-          _parseEventSource = null
-        }
-        // Try to get final status
-        parse.status(paperId, engine).then((status) => {
-          set({ parseStatus: status })
-          if (status.parse_status === 'parsed') {
-            set({ parsing: false, parseProgress: 1, currentEngine: engine })
-            get().loadPages(engine)
-          } else if (status.parse_status === 'failed') {
-            set({ parsing: false })
-          }
-        }).catch(() => {
-          set({ parsing: false })
-        })
-      }
+      // 使用统一的 SSE 连接管理（支持重连）
+      _reconnectParseSSE(paperId, engine)
     } catch {
       set({ parsing: false })
     }
