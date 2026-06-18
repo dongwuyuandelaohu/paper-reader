@@ -1,58 +1,101 @@
 # -*- mode: python ; coding: utf-8 -*-
+"""
+PaperLens Backend - PyInstaller spec for Tauri desktop app
+Run from backend/ directory: pyinstaller main.spec --clean --noconfirm
+Output: dist/main/main.exe (onedir mode)
+"""
+
+import sys
+from pathlib import Path
 
 block_cipher = None
 
+# SPECPATH is the directory containing this .spec file (i.e., backend/)
+# When running `pyinstaller main.spec` from backend/, SPECPATH == backend/
+backend_dir = Path(SPECPATH)
+project_root = backend_dir.parent
+
 a = Analysis(
     ['main.py'],
-    pathex=['.'],
+    pathex=[str(backend_dir)],
     binaries=[],
     datas=[
+        # Config files needed at runtime
         ('config', 'config'),
     ],
     hiddenimports=[
-        # uvicorn
+        # uvicorn internals
         'uvicorn',
         'uvicorn.logging',
         'uvicorn.loops',
         'uvicorn.loops.auto',
+        'uvicorn.loops.asyncio',
         'uvicorn.protocols',
         'uvicorn.protocols.http',
         'uvicorn.protocols.http.auto',
+        'uvicorn.protocols.http.h11_impl',
+        'uvicorn.protocols.http.httptools_impl',
         'uvicorn.protocols.websockets',
         'uvicorn.protocols.websockets.auto',
+        'uvicorn.protocols.websockets.wsproto_impl',
+        'uvicorn.protocols.websockets.websockets_impl',
         'uvicorn.lifespan',
         'uvicorn.lifespan.on',
-        # fastapi
+        'uvicorn.lifespan.off',
+        # FastAPI
         'fastapi',
+        'fastapi.middleware',
         'fastapi.middleware.cors',
         'fastapi.staticfiles',
         'fastapi.responses',
-        # aiosqlite
-        'aiosqlite',
-        # pydantic
+        'fastapi.routing',
+        # Pydantic v2
         'pydantic',
+        'pydantic.deprecated',
         'pydantic.deprecated.decorator',
         'pydantic.deprecated.json',
-        # multipart
-        'multipart',
-        'python_multipart',
-        # httpx
-        'httpx',
-        # anyio
+        'pydantic.networks',
+        'pydantic.types',
+        # Async / database
+        'aiosqlite',
+        'sqlite3',
         'anyio',
         'anyio._backends',
         'anyio._backends._asyncio',
-        # config
+        'anyio.streams',
+        'anyio.streams.memory',
+        # HTTP / multipart
+        'httpx',
+        'httpx._transports',
+        'httpx._transports.default',
+        'multipart',
+        'python_multipart',
+        'starlette',
+        'starlette.middleware',
+        'starlette.responses',
+        'starlette.routing',
+        'starlette.staticfiles',
+        # OpenAI client
+        'openai',
+        'openai._client',
+        'openai._streaming',
+        # PyMuPDF
+        'fitz',
+        'fitz.fitz',
+        # Pillow
+        'PIL',
+        'PIL.Image',
+        # Config
         'config',
         'config.paths',
-        # services
+        # Services
         'services',
         'services.db',
         'services.dependencies',
         'services.engine_detector',
         'services.engine_installer',
         'services.ai',
-        # api
+        # API routers
         'api',
         'api.papers',
         'api.translate',
@@ -64,16 +107,39 @@ a = Analysis(
         'api.system',
         'api.parse',
         'api.tags',
-        # engines
+        # Engines
         'engines',
         'engines.pymupdf_engine',
-        # fitz (PyMuPDF)
-        'fitz',
+        'engines.marker_engine',
+        'engines.mineru_engine',
     ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=[
+        # Standard library modules not needed
+        'tkinter',
+        'unittest',
+        'pytest',
+        'xmlrpc',
+        'pydoc',
+        # Large optional packages
+        'IPython',
+        'jupyter',
+        'notebook',
+        'matplotlib',
+        'scipy',
+        'numpy.testing',
+        # Exclude heavy ML libraries (installed separately as engine plugins)
+        'torch',
+        'torchvision',
+        'torchaudio',
+        'transformers',
+        'marker',
+        'magic_pdf',
+        'paddle',
+        'paddleocr',
+    ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
@@ -85,21 +151,28 @@ pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
     [],
+    exclude_binaries=True,  # onedir mode
     name='main',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    upx_exclude=[],
-    runtime_tmpdir=None,
-    console=True,
+    console=True,  # Show console for debugging; set False for release
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name='main',
 )

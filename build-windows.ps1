@@ -1,5 +1,11 @@
 # PaperLens Windows 构建脚本
 # 此脚本在 Windows 上自动构建完整的桌面应用
+#
+# 使用方法:
+#   .\build-windows.ps1              # 完整构建
+#   .\build-windows.ps1 -SkipFrontend  # 跳过前端构建
+#   .\build-windows.ps1 -SkipBackend   # 跳过后端构建
+#   .\build-windows.ps1 -Clean         # 清理后重新构建
 
 param(
     [switch]$SkipFrontend,
@@ -15,7 +21,7 @@ Write-Host "  PaperLens Windows 构建工具" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
-# 检查必要的工具
+# Check required tools
 function Test-Command($command) {
     try {
         Get-Command $command -ErrorAction Stop | Out-Null
@@ -25,143 +31,142 @@ function Test-Command($command) {
     }
 }
 
-Write-Host "检查构建工具..." -ForegroundColor Yellow
+Write-Host "Checking build tools..." -ForegroundColor Yellow
 
 $tools = @{
-    "node" = "Node.js"
-    "npm" = "npm"
-    "rustc" = "Rust"
-    "cargo" = "Cargo"
+    "node"   = "Node.js"
+    "npm"    = "npm"
+    "rustc"  = "Rust"
+    "cargo"  = "Cargo"
     "python" = "Python"
-    "pip" = "pip"
+    "pip"    = "pip"
 }
 
 $allToolsInstalled = $true
 foreach ($tool in $tools.GetEnumerator()) {
     if (Test-Command $tool.Key) {
         $version = & $tool.Key --version 2>$null
-        Write-Host "  ✓ $($tool.Value): $version" -ForegroundColor Green
+        Write-Host "  OK $($tool.Value): $version" -ForegroundColor Green
     } else {
-        Write-Host "  ✗ $($tool.Value): 未安装" -ForegroundColor Red
+        Write-Host "  !! $($tool.Value): NOT INSTALLED" -ForegroundColor Red
         $allToolsInstalled = $false
     }
 }
 
 if (-not $allToolsInstalled) {
     Write-Host ""
-    Write-Host "错误：缺少必要的构建工具，请安装后重试" -ForegroundColor Red
-    Write-Host "参考文档：WINDOWS_BUILD.md" -ForegroundColor Yellow
+    Write-Host "Error: missing build tools. Please install them first." -ForegroundColor Red
+    Write-Host "See WINDOWS_BUILD.md for details." -ForegroundColor Yellow
     exit 1
 }
 
 Write-Host ""
 
-# 清理旧的构建文件
+# Clean old build artifacts
 if ($Clean) {
-    Write-Host "清理旧的构建文件..." -ForegroundColor Yellow
-    if (Test-Path "frontend/dist") { Remove-Item -Recurse -Force "frontend/dist" }
-    if (Test-Path "backend/dist") { Remove-Item -Recurse -Force "backend/dist" }
-    if (Test-Path "backend/build") { Remove-Item -Recurse -Force "backend/build" }
-    if (Test-Path "src-tauri/target") { Remove-Item -Recurse -Force "src-tauri/target" }
-    Write-Host "  ✓ 清理完成" -ForegroundColor Green
+    Write-Host "Cleaning old build artifacts..." -ForegroundColor Yellow
+    if (Test-Path "frontend/dist")         { Remove-Item -Recurse -Force "frontend/dist" }
+    if (Test-Path "backend/dist")          { Remove-Item -Recurse -Force "backend/dist" }
+    if (Test-Path "backend/build")         { Remove-Item -Recurse -Force "backend/build" }
+    if (Test-Path "src-tauri/target")      { Remove-Item -Recurse -Force "src-tauri/target" }
+    if (Test-Path "src-tauri/resources/backend") { Remove-Item -Recurse -Force "src-tauri/resources/backend" }
+    Write-Host "  OK Cleaned" -ForegroundColor Green
     Write-Host ""
 }
 
-# 构建前端
+# ---- Step 1: Build Frontend ----
 if (-not $SkipFrontend) {
-    Write-Host "构建前端..." -ForegroundColor Yellow
+    Write-Host "[1/3] Building frontend..." -ForegroundColor Yellow
     Set-Location frontend
-    
-    Write-Host "  安装依赖..." -ForegroundColor Gray
+
+    Write-Host "  Installing dependencies..." -ForegroundColor Gray
     npm install --silent
-    
-    Write-Host "  构建生产版本..." -ForegroundColor Gray
+
+    Write-Host "  Building production bundle..." -ForegroundColor Gray
     npm run build
-    
+
     Set-Location ..
-    Write-Host "  ✓ 前端构建完成" -ForegroundColor Green
+    Write-Host "  OK Frontend built -> frontend/dist" -ForegroundColor Green
     Write-Host ""
 }
 
-# 构建后端
+# ---- Step 2: Build Backend (PyInstaller) ----
 if (-not $SkipBackend) {
-    Write-Host "构建后端..." -ForegroundColor Yellow
+    Write-Host "[2/3] Building backend with PyInstaller..." -ForegroundColor Yellow
     Set-Location backend
-    
-    Write-Host "  安装依赖..." -ForegroundColor Gray
+
+    Write-Host "  Installing Python dependencies..." -ForegroundColor Gray
     pip install -r requirements.txt --quiet
     pip install pyinstaller --quiet
-    
-    Write-Host "  使用 PyInstaller 打包..." -ForegroundColor Gray
+
+    Write-Host "  Running PyInstaller..." -ForegroundColor Gray
     pyinstaller main.spec --clean --noconfirm
-    
+
     Set-Location ..
-    
-    # 复制后端到 Tauri 资源目录
-    Write-Host "  复制到 Tauri 资源目录..." -ForegroundColor Gray
-    if (-not (Test-Path "src-tauri/resources/backend")) {
-        New-Item -ItemType Directory -Path "src-tauri/resources/backend" -Force | Out-Null
+
+    # Verify output
+    $backendExe = "backend/dist/main/main.exe"
+    if (-not (Test-Path $backendExe)) {
+        Write-Host "  ERROR: $backendExe was not created!" -ForegroundColor Red
+        Write-Host "  PyInstaller may have failed. Check backend/dist/ for details." -ForegroundColor Yellow
+        exit 1
     }
-    
-    Copy-Item -Path "backend/dist/main/main.exe" -Destination "src-tauri/resources/backend/" -Force
-    
-    # 复制 _internal 目录（如果存在）
-    if (Test-Path "backend/dist/main/_internal") {
-        Copy-Item -Path "backend/dist/main/_internal" -Destination "src-tauri/resources/backend/" -Recurse -Force
+
+    # Copy backend to Tauri resources directory
+    Write-Host "  Copying backend to Tauri resources..." -ForegroundColor Gray
+    $tauriBackend = "src-tauri/resources/backend"
+    if (Test-Path $tauriBackend) {
+        Remove-Item -Recurse -Force $tauriBackend
     }
-    
-    # 复制配置文件
-    if (Test-Path "backend/config") {
-        Copy-Item -Path "backend/config" -Destination "src-tauri/resources/backend/" -Recurse -Force
-    }
-    
-    Write-Host "  ✓ 后端构建完成" -ForegroundColor Green
+    # Copy the entire onedir output (main.exe + _internal/ + config/)
+    Copy-Item -Path "backend/dist/main" -Destination $tauriBackend -Recurse -Force
+
+    Write-Host "  OK Backend built -> $tauriBackend" -ForegroundColor Green
     Write-Host ""
 }
 
-# 构建 Tauri 应用
+# ---- Step 3: Build Tauri App ----
 if (-not $SkipTauri) {
-    Write-Host "构建 Tauri 应用..." -ForegroundColor Yellow
-    
-    Write-Host "  编译 Rust 代码..." -ForegroundColor Gray
+    Write-Host "[3/3] Building Tauri app..." -ForegroundColor Yellow
+
+    Write-Host "  Compiling Rust + bundling..." -ForegroundColor Gray
     npx tauri build --bundles msi,nsis
-    
-    Write-Host "  ✓ Tauri 构建完成" -ForegroundColor Green
+
+    Write-Host "  OK Tauri build complete" -ForegroundColor Green
     Write-Host ""
 }
 
-# 显示结果
+# ---- Results ----
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  构建完成！" -ForegroundColor Green
+Write-Host "  Build complete!" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
-$msiFiles = Get-ChildItem -Path "src-tauri/target/release/bundle/msi" -Filter "*.msi" -ErrorAction SilentlyContinue
+$msiFiles  = Get-ChildItem -Path "src-tauri/target/release/bundle/msi"  -Filter "*.msi" -ErrorAction SilentlyContinue
 $nsisFiles = Get-ChildItem -Path "src-tauri/target/release/bundle/nsis" -Filter "*.exe" -ErrorAction SilentlyContinue
 
 if ($msiFiles) {
-    Write-Host "MSI 安装包:" -ForegroundColor Yellow
+    Write-Host "MSI installer:" -ForegroundColor Yellow
     foreach ($file in $msiFiles) {
         $size = [math]::Round($file.Length / 1MB, 2)
-        Write-Host "  📦 $($file.Name) ($size MB)" -ForegroundColor White
+        Write-Host "  $([char]0x1F4E6) $($file.Name) ($size MB)" -ForegroundColor White
         Write-Host "     $($file.FullName)" -ForegroundColor Gray
     }
     Write-Host ""
 }
 
 if ($nsisFiles) {
-    Write-Host "NSIS 安装包:" -ForegroundColor Yellow
+    Write-Host "NSIS installer:" -ForegroundColor Yellow
     foreach ($file in $nsisFiles) {
         $size = [math]::Round($file.Length / 1MB, 2)
-        Write-Host "  📦 $($file.Name) ($size MB)" -ForegroundColor White
+        Write-Host "  $([char]0x1F4E6) $($file.Name) ($size MB)" -ForegroundColor White
         Write-Host "     $($file.FullName)" -ForegroundColor Gray
     }
     Write-Host ""
 }
 
-Write-Host "下一步:" -ForegroundColor Cyan
-Write-Host "  1. 测试安装包是否正常工作" -ForegroundColor White
-Write-Host "  2. 创建 Git tag 并推送触发自动构建:" -ForegroundColor White
-Write-Host "     git tag v0.1.0" -ForegroundColor Gray
-Write-Host "     git push origin v0.1.0" -ForegroundColor Gray
+Write-Host "Next steps:" -ForegroundColor Cyan
+Write-Host "  1. Test the installer on a Windows machine" -ForegroundColor White
+Write-Host "  2. Create a git tag to trigger CI build:" -ForegroundColor White
+Write-Host "     git tag v0.1.0 && git push origin v0.1.0" -ForegroundColor Gray
 Write-Host ""

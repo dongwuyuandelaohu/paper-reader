@@ -11,101 +11,83 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: write
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-    
+
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '20'
         cache: 'npm'
-    
+
     - name: Setup Rust
       uses: dtolnay/rust-toolchain@stable
       with:
         targets: x86_64-pc-windows-msvc
-    
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    # ---- Frontend ----
     - name: Install frontend dependencies
       run: npm install
       working-directory: ./frontend
-    
+
     - name: Build frontend
       run: npm run build
       working-directory: ./frontend
-    
+
+    # ---- Backend (PyInstaller) ----
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install pyinstaller
       working-directory: ./backend
-    
-    - name: Build backend executable
+
+    - name: Build backend with PyInstaller
       run: |
-        Write-Host "=== Starting PyInstaller build ==="
-        Write-Host "Current directory: $(Get-Location)"
-        Write-Host "Files in current directory:"
-        Get-ChildItem -Name
+        Write-Host "=== Running PyInstaller ==="
+        Write-Host "Working dir: $(Get-Location)"
+        pyinstaller main.spec --clean --noconfirm
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "PyInstaller failed"
+          exit 1
+        }
         Write-Host ""
-        
-        pyinstaller main.spec --clean --noconfirm 2>&1 | Tee-Object -Variable pyinstallerOutput
-        $exitCode = $LASTEXITCODE
-        
-        Write-Host ""
-        Write-Host "=== PyInstaller exit code: $exitCode ==="
-        Write-Host ""
-        
-        Write-Host "=== Checking dist directory ==="
-        if (Test-Path "dist") {
-            Get-ChildItem -Path "dist" -Recurse | ForEach-Object { Write-Host $_.FullName }
+        Write-Host "=== Checking output ==="
+        if (Test-Path "dist/main/main.exe") {
+          Write-Host "OK dist/main/main.exe exists"
+          Get-ChildItem -Path "dist/main" | ForEach-Object { Write-Host "  $($_.Name)" }
         } else {
-            Write-Host "dist directory does not exist!"
+          Write-Error "dist/main/main.exe not found!"
+          if (Test-Path "dist") {
+            Get-ChildItem -Path "dist" -Recurse | Select-Object FullName
+          }
+          exit 1
         }
-        
-        if ($exitCode -ne 0) {
-            Write-Error "PyInstaller failed with exit code $exitCode"
-            exit $exitCode
-        }
-        
-        if (-not (Test-Path "dist/main.exe")) {
-            Write-Error "dist/main.exe was not created!"
-            exit 1
-        }
-        
-        Write-Host "✓ Build successful: dist/main.exe"
       working-directory: ./backend
       shell: pwsh
-    
-    - name: List backend dist contents
-      run: |
-        Write-Host "=== backend/dist contents ==="
-        if (Test-Path "backend/dist") {
-            Get-ChildItem -Path "backend/dist" -Recurse | Select-Object FullName, Length
-        } else {
-            Write-Error "backend/dist directory does not exist!"
-            exit 1
-        }
-        Write-Host "=== Checking for main.exe ==="
-        if (Test-Path "backend/dist/main.exe") {
-            Write-Host "✓ Found backend/dist/main.exe"
-        } else {
-            Write-Error "backend/dist/main.exe not found!"
-            exit 1
-        }
-      shell: pwsh
-    
+
     - name: Copy backend to Tauri resources
       run: |
-        New-Item -ItemType Directory -Force -Path "src-tauri/resources/backend" | Out-Null
-        Copy-Item -Path "backend/dist/main.exe" -Destination "src-tauri/resources/backend/" -Force
+        $src = "backend/dist/main"
+        $dst = "src-tauri/resources/backend"
+        if (Test-Path $dst) { Remove-Item -Recurse -Force $dst }
+        Copy-Item -Path $src -Destination $dst -Recurse -Force
+        Write-Host "OK Copied backend to $dst"
+        Get-ChildItem -Path $dst | ForEach-Object { Write-Host "  $($_.Name)" }
       shell: pwsh
-    
+
+    # ---- Root npm ----
     - name: Install root dependencies
       run: npm install
-      shell: pwsh
-    
+
+    # ---- Tauri build ----
     - name: Build Tauri app
       uses: tauri-apps/tauri-action@v0
       env:
@@ -115,26 +97,20 @@ jobs:
         releaseName: "PaperLens v__VERSION__"
         releaseBody: |
           ## PaperLens - 学术论文阅读助手
-          
+
           ### 安装说明
-          1. 下载 `PaperLens_x64_en-US.msi` 或 `PaperLens_x64-setup.exe`
+          1. 下载 MSI 或 NSIS 安装包
           2. 运行安装程序
-          3. 按照提示完成安装
-          
+          3. 双击桌面快捷方式启动
+
           ### 系统要求
-          - Windows 10 或更高版本 (64位)
-          - 至少 2GB 内存
-          - 至少 500MB 可用磁盘空间
-          
-          ### 功能特性
-          - 📚 学术论文 PDF 阅读
-          - 🤖 多引擎 PDF 解析 (PyMuPDF/Marker/MinerU)
-          - 🌐 AI 翻译支持
-          - 💾 本地数据管理
+          - Windows 10/11 (64 位)
+          - 2 GB 内存
+          - 500 MB 磁盘空间
         releaseDraft: true
         prerelease: false
         args: "--bundles msi,nsis"
-    
+
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
