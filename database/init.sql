@@ -1,12 +1,10 @@
--- PaperLens 数据库初始化
--- 版本: 001
--- 描述: 创建所有基础表
+-- PaperLens 数据库初始化脚本 (合并 001 + 002)
+-- 包含所有基础表，paper_pages 已含 engine 列
 
--- 启用外键约束
 PRAGMA foreign_keys = ON;
 
 -- 1. 论文主表
-CREATE TABLE papers (
+CREATE TABLE IF NOT EXISTS papers (
     id              TEXT PRIMARY KEY,
     title           TEXT NOT NULL,
     authors         TEXT,
@@ -34,13 +32,13 @@ CREATE TABLE papers (
     last_read_at    TEXT
 );
 
-CREATE INDEX idx_papers_favorite ON papers(is_favorite);
-CREATE INDEX idx_papers_last_read ON papers(last_read_at DESC);
-CREATE INDEX idx_papers_created ON papers(created_at DESC);
-CREATE INDEX idx_papers_parse_status ON papers(parse_status);
+CREATE INDEX IF NOT EXISTS idx_papers_favorite ON papers(is_favorite);
+CREATE INDEX IF NOT EXISTS idx_papers_last_read ON papers(last_read_at DESC);
+CREATE INDEX IF NOT EXISTS idx_papers_created ON papers(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_papers_parse_status ON papers(parse_status);
 
--- 2. 论文页面内容（解析后）
-CREATE TABLE paper_pages (
+-- 2. 论文页面内容（含 engine 列，支持多引擎解析）
+CREATE TABLE IF NOT EXISTS paper_pages (
     id              TEXT PRIMARY KEY,
     paper_id        TEXT NOT NULL REFERENCES papers(id) ON DELETE CASCADE,
     page_number     INTEGER NOT NULL,
@@ -58,11 +56,11 @@ CREATE TABLE paper_pages (
     UNIQUE(paper_id, page_number, engine)
 );
 
-CREATE INDEX idx_pages_paper ON paper_pages(paper_id, page_number);
-CREATE INDEX idx_pages_engine ON paper_pages(engine);
+CREATE INDEX IF NOT EXISTS idx_pages_paper ON paper_pages(paper_id, page_number);
+CREATE INDEX IF NOT EXISTS idx_pages_engine ON paper_pages(engine);
 
 -- 3. 翻译缓存
-CREATE TABLE translations (
+CREATE TABLE IF NOT EXISTS translations (
     id              TEXT PRIMARY KEY,
     paper_id        TEXT NOT NULL REFERENCES papers(id) ON DELETE CASCADE,
     page_number     INTEGER NOT NULL,
@@ -78,11 +76,11 @@ CREATE TABLE translations (
     UNIQUE(paper_id, page_number, target_language)
 );
 
-CREATE INDEX idx_trans_paper ON translations(paper_id, page_number, target_language);
-CREATE INDEX idx_trans_language ON translations(target_language);
+CREATE INDEX IF NOT EXISTS idx_trans_paper ON translations(paper_id, page_number, target_language);
+CREATE INDEX IF NOT EXISTS idx_trans_language ON translations(target_language);
 
 -- 4. 对话
-CREATE TABLE conversations (
+CREATE TABLE IF NOT EXISTS conversations (
     id              TEXT PRIMARY KEY,
     paper_id        TEXT NOT NULL REFERENCES papers(id) ON DELETE CASCADE,
     title           TEXT,
@@ -96,11 +94,11 @@ CREATE TABLE conversations (
     updated_at      TEXT NOT NULL
 );
 
-CREATE INDEX idx_conv_paper ON conversations(paper_id, created_at DESC);
-CREATE INDEX idx_conv_archived ON conversations(is_archived);
+CREATE INDEX IF NOT EXISTS idx_conv_paper ON conversations(paper_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_conv_archived ON conversations(is_archived);
 
 -- 5. 对话消息
-CREATE TABLE messages (
+CREATE TABLE IF NOT EXISTS messages (
     id              TEXT PRIMARY KEY,
     conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
     role            TEXT NOT NULL,
@@ -116,11 +114,11 @@ CREATE TABLE messages (
     created_at      TEXT NOT NULL
 );
 
-CREATE INDEX idx_msg_conv ON messages(conversation_id, created_at);
-CREATE INDEX idx_msg_role ON messages(role);
+CREATE INDEX IF NOT EXISTS idx_msg_conv ON messages(conversation_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_msg_role ON messages(role);
 
 -- 6. 阅读笔记
-CREATE TABLE notes (
+CREATE TABLE IF NOT EXISTS notes (
     id              TEXT PRIMARY KEY,
     paper_id        TEXT NOT NULL REFERENCES papers(id) ON DELETE CASCADE,
     page_number     INTEGER NOT NULL,
@@ -132,10 +130,10 @@ CREATE TABLE notes (
     updated_at      TEXT NOT NULL
 );
 
-CREATE INDEX idx_notes_paper ON notes(paper_id, page_number);
+CREATE INDEX IF NOT EXISTS idx_notes_paper ON notes(paper_id, page_number);
 
 -- 7. 文本高亮
-CREATE TABLE highlights (
+CREATE TABLE IF NOT EXISTS highlights (
     id              TEXT PRIMARY KEY,
     paper_id        TEXT NOT NULL REFERENCES papers(id) ON DELETE CASCADE,
     page_number     INTEGER NOT NULL,
@@ -148,10 +146,10 @@ CREATE TABLE highlights (
     created_at      TEXT NOT NULL
 );
 
-CREATE INDEX idx_hl_paper ON highlights(paper_id, page_number);
+CREATE INDEX IF NOT EXISTS idx_hl_paper ON highlights(paper_id, page_number);
 
 -- 8. 书签
-CREATE TABLE bookmarks (
+CREATE TABLE IF NOT EXISTS bookmarks (
     id              TEXT PRIMARY KEY,
     paper_id        TEXT NOT NULL REFERENCES papers(id) ON DELETE CASCADE,
     page_number     INTEGER NOT NULL,
@@ -160,10 +158,10 @@ CREATE TABLE bookmarks (
     created_at      TEXT NOT NULL
 );
 
-CREATE INDEX idx_bm_paper ON bookmarks(paper_id, page_number);
+CREATE INDEX IF NOT EXISTS idx_bm_paper ON bookmarks(paper_id, page_number);
 
 -- 9. AI 模型配置
-CREATE TABLE models (
+CREATE TABLE IF NOT EXISTS models (
     id              TEXT PRIMARY KEY,
     name            TEXT NOT NULL,
     api_base_url    TEXT NOT NULL,
@@ -173,21 +171,22 @@ CREATE TABLE models (
     is_default_translate TEXT,
     is_default_chat TEXT,
     sort_order      INTEGER DEFAULT 0,
+    supports_vision INTEGER DEFAULT 0,
     created_at      TEXT NOT NULL,
     updated_at      TEXT NOT NULL
 );
 
-CREATE INDEX idx_models_default ON models(is_default_translate, is_default_chat);
+CREATE INDEX IF NOT EXISTS idx_models_default ON models(is_default_translate, is_default_chat);
 
 -- 10. 应用设置 (Key-Value)
-CREATE TABLE settings (
+CREATE TABLE IF NOT EXISTS settings (
     key             TEXT PRIMARY KEY,
     value           TEXT NOT NULL,
     updated_at      TEXT NOT NULL
 );
 
 -- 11. 标签
-CREATE TABLE tags (
+CREATE TABLE IF NOT EXISTS tags (
     id              TEXT PRIMARY KEY,
     name            TEXT NOT NULL UNIQUE,
     color           TEXT DEFAULT '#3b82f6',
@@ -195,14 +194,14 @@ CREATE TABLE tags (
 );
 
 -- 12. 论文-标签关联
-CREATE TABLE paper_tags (
+CREATE TABLE IF NOT EXISTS paper_tags (
     paper_id        TEXT NOT NULL REFERENCES papers(id) ON DELETE CASCADE,
     tag_id          TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
     PRIMARY KEY (paper_id, tag_id)
 );
 
 -- 13. 术语表缓存
-CREATE TABLE glossary_entries (
+CREATE TABLE IF NOT EXISTS glossary_entries (
     id              TEXT PRIMARY KEY,
     paper_id        TEXT REFERENCES papers(id) ON DELETE CASCADE,
     term            TEXT NOT NULL,
@@ -216,12 +215,12 @@ CREATE TABLE glossary_entries (
     updated_at      TEXT NOT NULL
 );
 
-CREATE INDEX idx_glossary_term ON glossary_entries(term);
-CREATE INDEX idx_glossary_paper ON glossary_entries(paper_id);
-CREATE INDEX idx_glossary_pinned ON glossary_entries(is_pinned);
+CREATE INDEX IF NOT EXISTS idx_glossary_term ON glossary_entries(term);
+CREATE INDEX IF NOT EXISTS idx_glossary_paper ON glossary_entries(paper_id);
+CREATE INDEX IF NOT EXISTS idx_glossary_pinned ON glossary_entries(is_pinned);
 
 -- 14. 解析任务队列
-CREATE TABLE parse_jobs (
+CREATE TABLE IF NOT EXISTS parse_jobs (
     id              TEXT PRIMARY KEY,
     paper_id        TEXT NOT NULL REFERENCES papers(id) ON DELETE CASCADE,
     engine          TEXT NOT NULL DEFAULT 'marker',
@@ -235,22 +234,25 @@ CREATE TABLE parse_jobs (
     created_at      TEXT NOT NULL
 );
 
-CREATE INDEX idx_jobs_paper ON parse_jobs(paper_id, created_at DESC);
-CREATE INDEX idx_jobs_status ON parse_jobs(status);
+CREATE INDEX IF NOT EXISTS idx_jobs_paper ON parse_jobs(paper_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_jobs_status ON parse_jobs(status);
 
 -- 15. 数据库版本管理
-CREATE TABLE schema_version (
+CREATE TABLE IF NOT EXISTS schema_version (
     version     INTEGER PRIMARY KEY,
     applied_at  TEXT NOT NULL,
     description TEXT
 );
 
--- 插入初始版本记录
-INSERT INTO schema_version (version, applied_at, description)
+-- 插入版本记录
+INSERT OR IGNORE INTO schema_version (version, applied_at, description)
 VALUES (1, datetime('now'), 'Initial schema with all base tables');
 
+INSERT OR IGNORE INTO schema_version (version, applied_at, description)
+VALUES (2, datetime('now'), 'Add engine to paper_pages UNIQUE constraint');
+
 -- 插入默认设置
-INSERT INTO settings (key, value, updated_at) VALUES
+INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES
     ('target_language', '"zh"', datetime('now')),
     ('translate_style', '"academic"', datetime('now')),
     ('auto_translate', 'true', datetime('now')),

@@ -100,7 +100,7 @@ if (-not $SkipBackend) {
     pip install pyinstaller --quiet
 
     Write-Host "  Running PyInstaller..." -ForegroundColor Gray
-    pyinstaller main.spec --clean --noconfirm
+    python -m PyInstaller main.spec --clean --noconfirm
 
     Set-Location ..
 

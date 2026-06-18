@@ -287,28 +287,7 @@ export default function Reader() {
   // Resizable panel widths
   const [parsePanelW, setParsePanelW] = useState(420)
   const [qaPanelW, setQaPanelW] = useState(380)
-  const [pdfPanelW, setPdfPanelW] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
-
-  // Calculate PDF panel width - TOC is now an overlay, doesn't affect layout
-  useEffect(() => {
-    const updateWidth = () => {
-      if (!containerRef.current) return
-      const containerWidth = containerRef.current.offsetWidth
-      const handleWidth = showParsePanel ? 12 : 0
-      const parseWidth = showParsePanel ? parsePanelW : 0
-      const qaHandleWidth = showQAPanel ? 12 : 0
-      const qaWidth = showQAPanel ? qaPanelW : 0
-      
-      // PDF fills remaining space
-      const available = containerWidth - handleWidth - parseWidth - qaHandleWidth - qaWidth
-      setPdfPanelW(Math.max(available, 0))
-    }
-    
-    updateWidth()
-    window.addEventListener('resize', updateWidth)
-    return () => window.removeEventListener('resize', updateWidth)
-  }, [showParsePanel, parsePanelW, showQAPanel, qaPanelW])
 
   // Handle parse panel width change
   const handleParseWidthChange = useCallback((newParseWidth: number) => {
@@ -522,7 +501,7 @@ export default function Reader() {
       {/* ═══════ Main Content ═══════ */}
       <div ref={containerRef} style={S.main}>
         {/* ─── PDF Panel (with TOC overlay) ─── */}
-        <div style={{ width: pdfPanelW, minWidth: pdfPanelW, display: 'flex', overflow: 'hidden', flexShrink: 0, position: 'relative' }}>
+        <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minWidth: 0, position: 'relative' }}>
           {/* ─── TOC Toggle Button (always visible) ─── */}
           <button
             onClick={reader.toggleToc}

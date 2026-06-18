@@ -7,6 +7,9 @@ use std::fs;
 use std::time::Duration;
 use tauri::Manager;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
 struct AppState {
     backend_process: Arc<Mutex<Option<Child>>>,
 }

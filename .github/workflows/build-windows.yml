@@ -45,15 +45,15 @@ jobs:
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pyinstaller
+        python -m pip install -r requirements.txt
+        python -m pip install pyinstaller
       working-directory: ./backend
 
     - name: Build backend with PyInstaller
       run: |
         Write-Host "=== Running PyInstaller ==="
         Write-Host "Working dir: $(Get-Location)"
-        pyinstaller main.spec --clean --noconfirm
+        python -m PyInstaller main.spec --clean --noconfirm
         if ($LASTEXITCODE -ne 0) {
           Write-Error "PyInstaller failed"
           exit 1
