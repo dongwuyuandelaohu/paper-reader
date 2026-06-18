@@ -155,6 +155,8 @@ export interface Engine {
   description: string
   install_size_mb: number
   built_in: boolean
+  error?: string | null
+  checked_at?: string | null
 }
 
 export interface Settings {

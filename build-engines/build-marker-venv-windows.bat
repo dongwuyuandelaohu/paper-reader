@@ -2,34 +2,35 @@
 setlocal enabledelayedexpansion
 
 REM ===============================================================
-REM MinerU Engine Windows Build (venv + wrapper, pinned torch)
+REM Marker Engine Windows Build (venv + wrapper, pinned torch)
 REM ===============================================================
-REM Mirrors build-marker-venv-windows.bat structure.
-REM Notes for MinerU 3.2.1:
-REM   - Uses python -m mineru entry (MinerU CLI)
-REM   - Defaults model source to ModelScope (China-friendly)
+REM Key fix: pin torch to a version within marker-pdf's allowed range
+REM   marker-pdf 1.10.2 requires torch>=2.7.0,<3.0.0
+REM   pip's default --index-url pytorch.org picks latest (2.12.x) which
+REM   breaks torchvision::nms registration. We pin torch==2.7.1 to be safe.
 REM ===============================================================
 
-set "MINERU_VERSION=3.2.1"
+set "MARKER_VERSION=1.10.2"
 set "TORCH_VERSION=2.7.1"
 
-echo === MinerU Engine Windows Build ===
-echo     mineru:        %MINERU_VERSION%
+echo === Marker Engine Windows Build ===
+echo     marker-pdf:    %MARKER_VERSION%
 echo     torch:         %TORCH_VERSION%  (pinned for stability)
+echo     transformers:  auto-resolved by pip
 echo.
 
 REM ==================== 0. Clean leftover junk ====================
 echo [0/6] Cleaning leftover artifacts...
 cd /d "%~dp0"
-if exist "dist\mineru-engine\nul')" del /F /Q "dist\mineru-engine\nul')" >nul 2>&1
-if exist "dist\mineru-engine" rmdir /s /q "dist\mineru-engine"
-if exist "venv-mineru-build-win" rmdir /s /q "venv-mineru-build-win"
+if exist "dist\marker-engine\nul')" del /F /Q "dist\marker-engine\nul')" >nul 2>&1
+if exist "dist\marker-engine" rmdir /s /q "dist\marker-engine"
+if exist "venv-marker-build-win" rmdir /s /q "venv-marker-build-win"
 
 REM ==================== 1. Find Python 3.10+ ====================
 echo.
 echo [1/6] Looking for Python 3.10+...
 set "PYTHON="
-for %%P in (python py python3.13 python3.12 python3.11 python3.10 python3) do (
+for %%P in (python py python3.11 python3.10 python3) do (
     if not defined PYTHON (
         where %%P >nul 2>&1
         if !errorlevel! == 0 (
@@ -56,7 +57,7 @@ echo     Found: !PYTHON!
 REM ==================== 2. Create engine venv ====================
 echo.
 echo [2/6] Creating engine virtual environment...
-set "ENGINE_DIR=%~dp0dist\mineru-engine"
+set "ENGINE_DIR=%~dp0dist\marker-engine"
 mkdir "!ENGINE_DIR!"
 "!PYTHON!" -m venv "!ENGINE_DIR!\.venv" --copies
 if errorlevel 1 (
@@ -82,52 +83,52 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo     - mineru[all]==%MINERU_VERSION% (pip will resolve paddlepaddle + others)
-"!PIP!" install "mineru[all]==%MINERU_VERSION%"
+echo     - marker-pdf==%MARKER_VERSION% (pip will resolve transformers + surya-ocr automatically)
+"!PIP!" install marker-pdf==%MARKER_VERSION%
 if errorlevel 1 (
-    echo     ERROR: mineru install failed
+    echo     ERROR: marker-pdf install failed
     exit /b 1
 )
 
-REM ==================== 4. Verify mineru ====================
+REM ==================== 4. Verify marker ====================
 echo.
-echo [4/6] Verifying mineru works...
-"!PYTHON_EXE!" -m mineru --version >nul 2>&1
+echo [4/6] Verifying marker_single works...
+"!ENGINE_DIR!\.venv\Scripts\marker_single.exe" --help >nul 2>&1
 if errorlevel 1 (
-    echo     ERROR: mineru failed to start. Check the error above.
+    echo     ERROR: marker_single.exe failed to start.
+    echo     The build is broken. Check the error above.
     exit /b 1
 )
-echo     python -m mineru is working
+echo     marker_single.exe is working
 
 REM Show installed versions
 echo.
 echo     Installed package versions:
-"!PIP!" list 2>nul | findstr /i /C:"mineru " /C:"torch " /C:"transformers " /C:"paddlepaddle " /C:"paddleocr "
+"!PIP!" list 2>nul | findstr /i /C:"torch " /C:"marker-pdf" /C:"transformers " /C:"surya-ocr"
 
 REM ==================== 5. Copy wrapper ====================
 echo.
 echo [5/6] Copying wrapper script...
-copy /Y "%~dp0mineru-engine-wrapper.bat" "!ENGINE_DIR!\mineru-engine.bat" >nul
+copy /Y "%~dp0marker-engine-wrapper.bat" "!ENGINE_DIR!\marker-engine.bat" >nul
 if errorlevel 1 (
     echo     ERROR: failed to copy wrapper
     exit /b 1
 )
-echo     mineru-engine.bat copied
+echo     marker-engine.bat copied
 
 REM ==================== 6. Write metadata ====================
 echo.
 echo [6/6] Writing metadata...
 
-> "!ENGINE_DIR!\VERSION" echo %MINERU_VERSION%
+> "!ENGINE_DIR!\VERSION" echo %MARKER_VERSION%
 
 (
     echo {
-    echo     "name": "mineru",
-    echo     "version": "%MINERU_VERSION%",
+    echo     "name": "marker",
+    echo     "version": "%MARKER_VERSION%",
     echo     "type": "venv",
     echo     "platform": "windows-x86_64",
-    echo     "torch_version": "%TORCH_VERSION%",
-    echo     "model_source": "modelscope"
+    echo     "torch_version": "%TORCH_VERSION%"
     echo }
 ) > "!ENGINE_DIR!\engine.json"
 
@@ -140,9 +141,9 @@ echo.
 echo Output: !ENGINE_DIR!\
 echo.
 echo Test commands:
-echo   "!ENGINE_DIR!\mineru-engine.bat" --help
-echo   "!ENGINE_DIR!\mineru-engine.bat" -p your.pdf -o output\ -b pipeline
+echo   "!ENGINE_DIR!\marker-engine.bat" --help
+echo   "!ENGINE_DIR!\marker-engine.bat" your.pdf --output_dir output\
 echo.
-echo Next: zip the dist\mineru-engine folder for distribution
+echo Next: zip the dist\marker-engine folder for distribution
 echo.
 pause

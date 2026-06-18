@@ -292,5 +292,9 @@ export const system = {
   engines: () => request<{ engines: Engine[]; default_engine: string }>('/system/engines'),
   recheckEngines: () => request<{ status: string; engines: Record<string, any>; message: string }>('/system/engines/recheck', { method: 'POST' }),
   installEngine: (engineName: string) => request<{ status: string; message: string }>(`/system/engines/${engineName}/install`, { method: 'POST' }),
-  engineInstallStatus: (engineName: string) => request<{ status: string; progress: number; message?: string }>(`/system/engines/${engineName}/install/status`),
+  engineInstallStatus: (engineName: string) => request<{
+    status: 'not_started' | 'installing' | 'completed' | 'failed'
+    progress: number
+    logs: Array<{ message: string; percent: number } | string>
+  }>(`/system/engines/${engineName}/install/status`),
 }

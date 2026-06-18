@@ -161,13 +161,22 @@ async def install_engine(
 
 
 @router.get("/engines/{engine_name}/install/status")
-async def get_engine_install_status(engine_name: str):
+async def get_engine_install_status(engine_name: str, stream: bool = False):
     """
-    获取引擎安装状态（SSE 流式返回）
+    获取引擎安装状态
+
+    Args:
+        engine_name: 引擎名称
+        stream: 是否 SSE 流式返回（默认 False，返回一次 JSON 快照）
     """
     if engine_name not in ["marker", "mineru"]:
         raise HTTPException(status_code=400, detail=f"不支持的引擎: {engine_name}")
-    
+
+    if not stream:
+        # 快照模式：直接返回当前状态 JSON
+        return get_install_status(engine_name)
+
+    # SSE 流式模式
     async def event_generator():
         # 创建客户端队列
         client_queue: asyncio.Queue = asyncio.Queue(maxsize=100)

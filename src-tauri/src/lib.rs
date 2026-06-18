@@ -51,7 +51,18 @@ fn start_backend<R: tauri::Runtime>(
     process: Arc<Mutex<Option<Child>>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let resource_dir = app.path().resource_dir()?;
-    let backend_exe = resource_dir.join("backend").join("main.exe");
+    // Tauri v2 bundles resources preserving directory structure from src-tauri/,
+    // so "resources/backend/**/*" becomes "$RESOURCE/resources/backend/".
+    // Try both paths: $RESOURCE/backend/main.exe and $RESOURCE/resources/backend/main.exe
+    let backend_exe_direct = resource_dir.join("backend").join("main.exe");
+    let backend_exe_nested = resource_dir.join("resources").join("backend").join("main.exe");
+    let backend_exe = if backend_exe_direct.exists() {
+        backend_exe_direct
+    } else if backend_exe_nested.exists() {
+        backend_exe_nested
+    } else {
+        resource_dir.join("backend").join("main.exe") // fallback for logging
+    };
     log::info!("Backend exe path: {:?}", backend_exe);
 
     // Determine executable path and working directory
@@ -114,6 +125,10 @@ fn start_backend<R: tauri::Runtime>(
         .stdout(stdout_cfg)
         .stderr(stderr_cfg);
 
+    // Hide console window on Windows
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+
     match cmd.spawn() {
         Ok(child) => {
             log::info!("Backend process started (PID: {})", child.id());
@@ -126,7 +141,10 @@ fn start_backend<R: tauri::Runtime>(
     }
 
     // Health check: poll until backend responds or timeout (30 seconds)
-    wait_for_healthy();
+    // Run in a separate thread to avoid blocking the UI
+    std::thread::spawn(|| {
+        wait_for_healthy();
+    });
 
     Ok(())
 }

@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Sidebar } from '../components/Sidebar'
 import { useSettingsStore } from '../stores/useSettingsStore'
 import { useToastStore } from '../components/Toast'
+import { system } from '../api/client'
 import type { Engine } from '../api/types'
-import { Cpu, Globe, BookOpen, MessageSquare, Info, ChevronDown, RotateCcw, Save } from 'lucide-react'
+import { Cpu, Globe, BookOpen, MessageSquare, Info, ChevronDown, ChevronRight, RotateCcw, Save, Download, CheckCircle2, AlertCircle, Loader2, ExternalLink, Folder } from 'lucide-react'
 
 // ─── Sub-components ──────────────────────────────────────────
 
@@ -137,8 +138,19 @@ function SettingRow({ label, children }: { label: string; children: React.ReactN
 
 // ─── Engine Card ─────────────────────────────────────────────
 
-function EngineCard({ engine, isDefault, onSetDefault }: {
-  engine: Engine; isDefault: boolean; onSetDefault: () => void
+type InstallState = {
+  status: 'idle' | 'starting' | 'downloading' | 'completed' | 'failed'
+  progress: number
+  message: string
+  logs: string[]
+  showManual: boolean
+}
+
+function EngineCard({ engine, isDefault, onSetDefault, onInstallComplete }: {
+  engine: Engine
+  isDefault: boolean
+  onSetDefault: () => void
+  onInstallComplete: () => void
 }) {
   const engineIcons: Record<string, string> = {
     PyMuPDF: '📄',
@@ -146,87 +158,264 @@ function EngineCard({ engine, isDefault, onSetDefault }: {
     MinerU: '⛏️',
   }
   const icon = engineIcons[engine.name] || '⚙️'
+  const engineKey = engine.name.toLowerCase()  // 'marker' / 'mineru' / 'pymupdf'
+  const canInstall = engineKey === 'marker' || engineKey === 'mineru'
+
+  const [install, setInstall] = useState<InstallState>({
+    status: 'idle', progress: 0, message: '', logs: [], showManual: false,
+  })
+  const pollRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) window.clearInterval(pollRef.current)
+    }
+  }, [])
+
+  const startInstall = async () => {
+    setInstall({ status: 'starting', progress: 0, message: '正在启动安装...', logs: [], showManual: false })
+    try {
+      await system.installEngine(engineKey)
+      // 开始轮询状态
+      setInstall(s => ({ ...s, status: 'downloading', message: '正在下载...', progress: 5 }))
+      pollRef.current = window.setInterval(async () => {
+        try {
+          const status = await system.engineInstallStatus(engineKey)
+          // 后端没有顶层 message，从最近一条 log 推导
+          const lastLog = status.logs?.[status.logs.length - 1]
+          const msgText = lastLog && typeof lastLog === 'object'
+            ? lastLog.message
+            : (lastLog as string | undefined)
+          const newState: InstallState = {
+            status: status.status === 'completed' ? 'completed'
+                  : status.status === 'failed' ? 'failed'
+                  : 'downloading',
+            progress: status.progress ?? 0,
+            message: msgText ?? '',
+            logs: status.logs ?? [],
+            showManual: install.showManual,
+          }
+          setInstall(newState)
+          if (newState.status === 'completed') {
+            if (pollRef.current) window.clearInterval(pollRef.current)
+            onInstallComplete()
+          } else if (newState.status === 'failed') {
+            if (pollRef.current) window.clearInterval(pollRef.current)
+          }
+        } catch (e) {
+          // 忽略单次轮询错误
+        }
+      }, 1500)
+    } catch (err: any) {
+      setInstall(s => ({ ...s, status: 'failed', message: err.message || '启动失败' }))
+    }
+  }
+
+  const renderAction = () => {
+    if (!canInstall) {
+      // PyMuPDF 等内置引擎
+      return (
+        <span style={{
+          fontSize: 11, padding: '3px 10px', borderRadius: 10, fontWeight: 500,
+          background: 'var(--success-bg)', color: 'var(--success)',
+        }}>内置</span>
+      )
+    }
+
+    if (engine.available) {
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+          <span style={{
+            fontSize: 11, padding: '3px 10px', borderRadius: 10, fontWeight: 500,
+            background: 'var(--success-bg)', color: 'var(--success)',
+            display: 'flex', alignItems: 'center', gap: 4,
+          }}>
+            <CheckCircle2 size={11} /> 已安装
+          </span>
+          {!isDefault && (
+            <button onClick={onSetDefault} style={{
+              padding: '6px 14px', fontSize: 12, fontWeight: 500,
+              border: '1px solid var(--border2)', borderRadius: 8,
+              background: 'var(--white)', color: 'var(--fg2)', cursor: 'pointer',
+            }}>设为默认</button>
+          )}
+        </div>
+      )
+    }
+
+    // 未安装
+    const isWorking = install.status === 'starting' || install.status === 'downloading'
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+        {isWorking ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 180 }}>
+            <Loader2 size={14} style={{ animation: 'spin 1s linear infinite', color: 'var(--accent)' }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 11, color: 'var(--stone)', marginBottom: 4 }}>
+                {install.message || '下载中...'} {install.progress}%
+              </div>
+              <div style={{
+                height: 4, background: 'var(--sand)', borderRadius: 2, overflow: 'hidden',
+              }}>
+                <div style={{
+                  width: `${install.progress}%`, height: '100%',
+                  background: 'var(--accent)', transition: 'width 0.3s',
+                }} />
+              </div>
+            </div>
+          </div>
+        ) : install.status === 'completed' ? (
+          <span style={{
+            fontSize: 11, padding: '3px 10px', borderRadius: 10, fontWeight: 500,
+            background: 'var(--success-bg)', color: 'var(--success)',
+          }}>安装完成</span>
+        ) : install.status === 'failed' ? (
+          <span style={{
+            fontSize: 11, padding: '3px 10px', borderRadius: 10, fontWeight: 500,
+            background: 'var(--error-bg)', color: 'var(--error)',
+            display: 'flex', alignItems: 'center', gap: 4,
+          }}>
+            <AlertCircle size={11} /> 失败
+          </span>
+        ) : (
+          <button onClick={startInstall} style={{
+            padding: '6px 14px', fontSize: 12, fontWeight: 500,
+            border: 'none', borderRadius: 8,
+            background: 'var(--accent)', color: '#fff', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: 5,
+          }}>
+            <Download size={12} /> 下载安装
+          </button>
+        )}
+        {!isDefault && engine.available && (
+          <button onClick={onSetDefault} style={{
+            padding: '6px 14px', fontSize: 12, fontWeight: 500,
+            border: '1px solid var(--border2)', borderRadius: 8,
+            background: 'var(--white)', color: 'var(--fg2)', cursor: 'pointer',
+          }}>设为默认</button>
+        )}
+      </div>
+    )
+  }
+
+  const manualDir = `C:\\Users\\<你的用户名>\\.paperlens\\engines\\${engineKey}-engine`
+  const downloadUrl = engineKey === 'marker'
+    ? 'https://github.com/paper-reader/engines/releases'
+    : 'https://github.com/paper-reader/engines/releases'
 
   return (
     <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: 16,
-      padding: '16px 20px',
-      background: isDefault ? 'var(--surface)' : 'var(--white)',
-      border: isDefault ? '1.5px solid var(--accent)' : '1px solid var(--border)',
-      borderRadius: 12,
-      marginBottom: 10,
+      background: install.status === 'failed' ? 'rgba(239,68,68,0.03)' : 'var(--white)',
+      border: `1px solid ${install.status === 'failed' ? 'var(--error-bg)' : 'var(--border)'}`,
+      borderRadius: 12, marginBottom: 10, overflow: 'hidden',
     }}>
-      <div style={{
-        width: 40,
-        height: 40,
-        borderRadius: 10,
-        background: 'var(--bg)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontSize: 20,
-        flexShrink: 0,
-      }}>
-        {icon}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 20px' }}>
+        <div style={{
+          width: 40, height: 40, borderRadius: 10, background: 'var(--bg)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 20, flexShrink: 0,
+        }}>{icon}</div>
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)' }}>{engine.name}</span>
+            {isDefault && (
+              <span style={{
+                fontSize: 10, padding: '2px 8px', background: 'var(--accent)',
+                color: '#fff', borderRadius: 10, fontWeight: 500,
+              }}>默认</span>
+            )}
+            {engine.error && !engine.available && (
+              <span style={{
+                fontSize: 10, padding: '2px 8px',
+                background: 'var(--error-bg)', color: 'var(--error)',
+                borderRadius: 10, fontWeight: 500,
+              }}>未安装</span>
+            )}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--stone)', marginBottom: 4, lineHeight: 1.4 }}>
+            {engine.description}
+          </div>
+          <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--silver)' }}>
+            {engine.version && <span>v{engine.version}</span>}
+            {engine.install_size_mb > 0 && <span>{engine.install_size_mb} MB</span>}
+            {engine.built_in && <span>内置</span>}
+          </div>
+        </div>
+
+        {renderAction()}
       </div>
 
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--fg)' }}>{engine.name}</span>
-          {isDefault && (
-            <span style={{
-              fontSize: 10,
-              padding: '2px 8px',
-              background: 'var(--accent)',
-              color: '#fff',
-              borderRadius: 10,
-              fontWeight: 500,
-            }}>默认</span>
-          )}
-        </div>
-        <div style={{ fontSize: 12, color: 'var(--stone)', marginBottom: 4, lineHeight: 1.4 }}>
-          {engine.description}
-        </div>
-        <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--silver)' }}>
-          {engine.version && <span>v{engine.version}</span>}
-          {engine.install_size_mb > 0 && <span>{engine.install_size_mb} MB</span>}
-          {engine.built_in && <span>内置</span>}
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-        <span style={{
-          fontSize: 11,
-          padding: '3px 10px',
-          borderRadius: 10,
-          fontWeight: 500,
-          background: engine.available ? 'var(--success-bg)' : 'var(--bg)',
-          color: engine.available ? 'var(--success)' : 'var(--stone)',
-        }}>
-          {engine.available ? '可用' : '不可用'}
-        </span>
-        {!isDefault && engine.available && (
+      {/* 手动安装说明（仅 marker / mineru） */}
+      {canInstall && (
+        <div style={{ borderTop: '1px solid var(--border)' }}>
           <button
-            onClick={onSetDefault}
+            onClick={() => setInstall(s => ({ ...s, showManual: !s.showManual }))}
             style={{
-              padding: '6px 14px',
-              fontSize: 12,
-              fontWeight: 500,
-              border: '1px solid var(--border2)',
-              borderRadius: 8,
-              background: 'var(--white)',
-              color: 'var(--fg2)',
-              cursor: 'pointer',
-              transition: 'all 0.15s',
-              whiteSpace: 'nowrap',
+              width: '100%', padding: '10px 20px', background: 'var(--surface)',
+              border: 'none', cursor: 'pointer', textAlign: 'left',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              fontSize: 12, color: 'var(--stone)',
             }}
           >
-            设为默认
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {install.showManual ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              网络不好？查看手动安装说明
+            </span>
           </button>
-        )}
-      </div>
+          {install.showManual && (
+            <div style={{
+              padding: '14px 20px 18px', background: 'var(--surface)',
+              fontSize: 12, color: 'var(--fg2)', lineHeight: 1.7,
+            }}>
+              <p style={{ marginBottom: 10, color: 'var(--stone)' }}>
+                如果自动下载失败（网络受限或下载速度慢），可以手动下载引擎包并解压到指定目录，然后点击"重新检测"。
+              </p>
+              <ol style={{ paddingLeft: 20, marginBottom: 10 }}>
+                <li style={{ marginBottom: 6 }}>
+                  访问{' '}
+                  <a
+                    href={downloadUrl}
+                    target="_blank" rel="noreferrer"
+                    style={{ color: 'var(--accent)', textDecoration: 'none' }}
+                  >
+                    GitHub Releases <ExternalLink size={10} style={{ display: 'inline', verticalAlign: 'middle' }} />
+                  </a>
+                  ，下载对应平台的 {engineKey}-engine-{engineKey === 'marker' ? 'windows-x86_64' : 'windows-x86_64'}.zip
+                </li>
+                <li style={{ marginBottom: 6 }}>
+                  解压到目录：
+                  <code style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                    padding: '2px 6px', marginLeft: 4,
+                    background: 'var(--bg)', border: '1px solid var(--border)',
+                    borderRadius: 4, fontFamily: 'var(--font-mono)', fontSize: 11,
+                  }}>
+                    <Folder size={10} /> {manualDir}
+                  </code>
+                </li>
+                <li style={{ marginBottom: 6 }}>
+                  确保目录中包含 <code style={{ padding: '1px 4px', background: 'var(--bg)', borderRadius: 3, fontFamily: 'var(--font-mono)' }}>{engineKey}-engine{engineKey === 'mineru' ? '.bat' : '.exe'}</code> 文件
+                </li>
+                <li>重启 PaperLens，系统会自动检测到引擎</li>
+              </ol>
+            </div>
+          )}
+
+          {install.status === 'failed' && install.logs.length > 0 && (
+            <div style={{
+              padding: '12px 20px', background: 'var(--error-bg)',
+              fontSize: 11, color: 'var(--error)', fontFamily: 'var(--font-mono)',
+              maxHeight: 120, overflowY: 'auto',
+            }}>
+              {install.logs.slice(-5).map((log, i) => {
+                const text = typeof log === 'string' ? log : (log?.message ?? String(log))
+                return <div key={i}>{text}</div>
+              })}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -295,6 +484,21 @@ export default function Settings() {
 
   const handleSetDefaultEngine = async (engineName: string) => {
     setParseEngine(engineName)
+  }
+
+  const handleInstallComplete = async () => {
+    showToast('引擎安装完成')
+    await fetchEngines()  // 重新获取引擎列表
+  }
+
+  const handleRecheck = async () => {
+    try {
+      const res = await system.recheckEngines()
+      showToast(res.message || '引擎检测完成')
+      await fetchEngines()
+    } catch (err: any) {
+      showToast('检测失败: ' + (err.message || '未知错误'))
+    }
   }
 
   const handleSave = async () => {
@@ -400,7 +604,20 @@ export default function Settings() {
 
             {/* ── Section 1: 解析引擎 ── */}
             <section>
-              <SectionTitle icon={<Cpu size={18} />} title="解析引擎" />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <SectionTitle icon={<Cpu size={18} />} title="解析引擎" />
+                <button
+                  onClick={handleRecheck}
+                  style={{
+                    padding: '4px 12px', fontSize: 12, fontWeight: 500,
+                    border: '1px solid var(--border2)', borderRadius: 6,
+                    background: 'var(--white)', color: 'var(--fg2)', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 4,
+                  }}
+                >
+                  <RotateCcw size={12} /> 重新检测
+                </button>
+              </div>
               <SectionDesc>选择默认的 PDF 解析引擎。不同引擎在速度、精度和格式支持上有差异。</SectionDesc>
 
               {engines.map((engine) => (
@@ -409,6 +626,7 @@ export default function Settings() {
                   engine={engine}
                   isDefault={parseEngine === engine.name}
                   onSetDefault={() => handleSetDefaultEngine(engine.name)}
+                  onInstallComplete={handleInstallComplete}
                 />
               ))}
 
