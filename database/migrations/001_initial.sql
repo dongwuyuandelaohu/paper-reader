@@ -66,6 +66,7 @@ CREATE TABLE translations (
     id              TEXT PRIMARY KEY,
     paper_id        TEXT NOT NULL REFERENCES papers(id) ON DELETE CASCADE,
     page_number     INTEGER NOT NULL,
+    engine          TEXT DEFAULT 'pymupdf',
     target_language TEXT NOT NULL DEFAULT 'zh',
     content         TEXT NOT NULL,
     model_id        TEXT,
@@ -75,10 +76,11 @@ CREATE TABLE translations (
     translate_error TEXT,
     created_at      TEXT NOT NULL,
     updated_at      TEXT NOT NULL,
-    UNIQUE(paper_id, page_number, target_language)
+    UNIQUE(paper_id, page_number, engine, target_language)
 );
 
 CREATE INDEX idx_trans_paper ON translations(paper_id, page_number, target_language);
+CREATE INDEX idx_trans_engine ON translations(engine);
 CREATE INDEX idx_trans_language ON translations(target_language);
 
 -- 4. 对话
