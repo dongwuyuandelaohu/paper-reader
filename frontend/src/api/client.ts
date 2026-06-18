@@ -8,6 +8,30 @@ import type {
 const isDev = import.meta.env.DEV
 const API_BASE = isDev ? '/api/v1' : 'http://localhost:8765/api/v1'
 
+/**
+ * 等待后端就绪（最多等待 15 秒）
+ * 每 500ms 检查一次 /system/health 接口
+ */
+export async function waitForBackend(): Promise<boolean> {
+  const maxAttempts = 30  // 30 * 500ms = 15秒
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      const res = await fetch(`${API_BASE}/system/health`, {
+        signal: AbortSignal.timeout(2000),
+      })
+      if (res.ok) {
+        console.log('[API] 后端已就绪')
+        return true
+      }
+    } catch {
+      // 后端还没启动好，继续等待
+    }
+    await new Promise(r => setTimeout(r, 500))
+  }
+  console.error('[API] 后端启动超时')
+  return false
+}
+
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(API_BASE + url, {
     headers: { 'Content-Type': 'application/json', ...options?.headers },
@@ -109,7 +133,6 @@ export const parse = {
 // ===== Translate =====
 export const translate = {
   translatePage: async (paperId: string, pageNumber: number, modelId?: string, engine?: string, force?: boolean): Promise<AsyncGenerator<SSEEvent>> => {
-    // The backend may return cached JSON (not SSE), so we need to handle both
     const res = await fetch(`${API_BASE}/translate/${paperId}/pages/${pageNumber}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -123,7 +146,6 @@ export const translate = {
     if (contentType.includes('application/json')) {
       const data = await res.json()
       if (data.cached && data.content) {
-        // Return as a generator that yields the cached content
         return (async function* () {
           yield { type: 'content' as const, content: data.content }
           yield { type: 'done' as const, tokens_input: 0, tokens_output: data.tokens_used || 0 }

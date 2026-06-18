@@ -53,13 +53,11 @@ fn start_backend<R: Runtime>(app: &tauri::App<R>, process: Arc<Mutex<Option<Chil
     // 如果 exe 不存在，尝试使用 Python 运行
     let child = if backend_exe.exists() {
         log::info!("启动后端: {:?}", backend_exe);
-        let output = Command::new(&backend_exe)
+        Command::new(&backend_exe)
             .current_dir(backend_exe.parent().unwrap())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .spawn()?;
-        log::info!("后端进程已启动, PID: {}", output.id());
-        output
+            .spawn()?
     } else {
         // 开发模式：使用 Python 运行
         let backend_dir = std::env::current_dir()?.join("backend");
@@ -67,29 +65,22 @@ fn start_backend<R: Runtime>(app: &tauri::App<R>, process: Arc<Mutex<Option<Chil
         
         if !main_py.exists() {
             log::warn!("后端文件不存在: {:?}", main_py);
-            log::warn!("请确保后端文件已正确复制到资源目录");
             return Ok(());
         }
         
         log::info!("启动后端 (开发模式): python {:?}", main_py);
-        let output = Command::new("python")
+        Command::new("python")
             .arg(&main_py)
             .current_dir(&backend_dir)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .spawn()?;
-        log::info!("后端进程已启动 (开发模式), PID: {}", output.id());
-        output
+            .spawn()?
     };
     
     // 保存进程引用
     *process.lock().unwrap() = Some(child);
     
-    // 等待后端启动
-    log::info!("等待后端启动 (3秒)...");
-    std::thread::sleep(std::time::Duration::from_secs(3));
-    
-    log::info!("后端启动完成");
+    log::info!("后端进程已启动");
     Ok(())
 }
 
