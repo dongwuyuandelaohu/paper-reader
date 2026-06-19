@@ -16,8 +16,13 @@ from fastapi.responses import FileResponse
 
 # 配置日志（强制 UTF-8，避免 Windows GBK 编码错误）
 import io
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
-sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace', line_buffering=True)
+try:
+    if hasattr(sys.stdout, 'buffer'):
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
+    if hasattr(sys.stderr, 'buffer'):
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace', line_buffering=True)
+except Exception:
+    pass  # frozen 模式下 stdout 可能不可用，跳过
 
 logging.basicConfig(
     level=logging.INFO,
@@ -79,7 +84,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="PaperLens API",
     description="论文双语阅读工具后端服务",
-    version="0.1.0",
+    version="0.1.2",
     lifespan=lifespan,
 )
 
@@ -124,7 +129,7 @@ async def root():
     
     return {
         "name": "PaperLens API",
-        "version": "0.1.0",
+        "version": "0.1.2",
         "docs": "/docs",
     }
 

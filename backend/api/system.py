@@ -25,19 +25,19 @@ _install_clients: Dict[str, Set[asyncio.Queue]] = {}
 
 @router.get("/health")
 async def health_check(db: Database = Depends(get_db)):
-    """健康检查"""
+    """健康检查 - 只要服务能响应就返回 ok"""
+    paper_count = 0
+    engines_info = {}
     try:
         result = await db.fetch_one("SELECT COUNT(*) as count FROM papers")
         paper_count = result["count"] if result else 0
+        engines_info = await load_engines_from_db(db)
     except Exception as e:
-        return {"status": "error", "error": str(e)}
-    
-    # 从 DB 读取引擎状态
-    engines_info = await load_engines_from_db(db)
-    
+        logger.warning(f"Health check DB error (non-fatal): {e}")
+
     return {
         "status": "ok",
-        "version": "0.1.0",
+        "version": "0.1.2",
         "paper_count": paper_count,
         "engines": engines_info,
     }
