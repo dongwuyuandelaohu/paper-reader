@@ -80,11 +80,16 @@ jobs:
         Write-Host "=== Smoke test ==="
         $exeDir = (Resolve-Path "backend\dist\main").Path
         Write-Host "Exe dir: $exeDir"
-        Write-Host "Files in exe dir:"
-        Get-ChildItem $exeDir -Name | Select-Object -First 20 | ForEach-Object { Write-Host "  $_" }
 
-        # Start exe from its own directory (required for PyInstaller onedir)
-        $proc = Start-Process -FilePath "$exeDir\main.exe" -WorkingDirectory $exeDir -PassThru
+        # Capture output to temp files for diagnostics
+        $outFile = "$env:TEMP\backend_out.log"
+        $errFile = "$env:TEMP\backend_err.log"
+
+        $proc = Start-Process -FilePath "$exeDir\main.exe" `
+          -WorkingDirectory $exeDir `
+          -PassThru `
+          -RedirectStandardOutput $outFile `
+          -RedirectStandardError $errFile
         Write-Host "Started PID: $($proc.Id)"
 
         $healthy = $false
@@ -93,6 +98,10 @@ jobs:
 
           if ($proc.HasExited) {
             Write-Error "Backend EXITED with code: $($proc.ExitCode)"
+            Write-Host "=== stdout ==="
+            Get-Content $outFile -ErrorAction SilentlyContinue
+            Write-Host "=== stderr ==="
+            Get-Content $errFile -ErrorAction SilentlyContinue
             exit 1
           }
 
@@ -105,14 +114,18 @@ jobs:
               break
             }
           } catch {
-            if ($i % 5 -eq 0) { Write-Host "  Waiting... ($($i+1)/45)" }
+            if ($i % 10 -eq 0) { Write-Host "  Waiting... ($($i+1)/45)" }
           }
         }
 
         taskkill /PID $proc.Id /T /F 2>$null | Out-Null
 
         if (-not $healthy) {
-          Write-Error "Smoke test FAILED"
+          Write-Error "Smoke test FAILED - backend did not respond in 45s"
+          Write-Host "=== stdout ==="
+          Get-Content $outFile -ErrorAction SilentlyContinue
+          Write-Host "=== stderr ==="
+          Get-Content $errFile -ErrorAction SilentlyContinue
           exit 1
         }
       shell: pwsh

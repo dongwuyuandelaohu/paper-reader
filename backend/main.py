@@ -15,14 +15,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 # 配置日志（强制 UTF-8，避免 Windows GBK 编码错误）
-import io
+# 使用 reconfigure 原地修改编码，不替换 stream 对象（PyInstaller 兼容）
 try:
-    if hasattr(sys.stdout, 'buffer'):
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
-    if hasattr(sys.stderr, 'buffer'):
-        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace', line_buffering=True)
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    if hasattr(sys.stderr, 'reconfigure'):
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 except Exception:
-    pass  # frozen 模式下 stdout 可能不可用，跳过
+    pass
 
 logging.basicConfig(
     level=logging.INFO,
