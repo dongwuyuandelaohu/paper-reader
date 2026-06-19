@@ -81,32 +81,25 @@ jobs:
         $exeDir = (Resolve-Path "backend\dist\main").Path
         Write-Host "Exe dir: $exeDir"
 
-        # Capture output to temp files for diagnostics
-        $outFile = "$env:TEMP\backend_out.log"
-        $errFile = "$env:TEMP\backend_err.log"
-
+        # IMPORTANT: Do NOT use -RedirectStandardOutput/Error here!
+        # That creates pipes with 4KB buffers. If nobody reads, the process
+        # blocks on write (pipe deadlock). Let output go to CI console instead.
         $proc = Start-Process -FilePath "$exeDir\main.exe" `
           -WorkingDirectory $exeDir `
-          -PassThru `
-          -RedirectStandardOutput $outFile `
-          -RedirectStandardError $errFile
+          -PassThru
         Write-Host "Started PID: $($proc.Id)"
 
         $healthy = $false
-        for ($i = 0; $i -lt 45; $i++) {
+        for ($i = 0; $i -lt 60; $i++) {
           Start-Sleep -Seconds 1
 
           if ($proc.HasExited) {
             Write-Error "Backend EXITED with code: $($proc.ExitCode)"
-            Write-Host "=== stdout ==="
-            Get-Content $outFile -ErrorAction SilentlyContinue
-            Write-Host "=== stderr ==="
-            Get-Content $errFile -ErrorAction SilentlyContinue
             exit 1
           }
 
           try {
-            $resp = Invoke-WebRequest -Uri "http://localhost:8765/api/v1/system/health" -TimeoutSec 2 -UseBasicParsing
+            $resp = Invoke-WebRequest -Uri "http://localhost:8765/api/v1/system/health" -TimeoutSec 3 -UseBasicParsing
             if ($resp.StatusCode -eq 200) {
               Write-Host "OK Health check passed after $($i+1)s"
               Write-Host "Response: $($resp.Content)"
@@ -114,18 +107,14 @@ jobs:
               break
             }
           } catch {
-            if ($i % 10 -eq 0) { Write-Host "  Waiting... ($($i+1)/45)" }
+            if ($i % 10 -eq 0) { Write-Host "  Waiting... ($($i+1)/60)" }
           }
         }
 
         taskkill /PID $proc.Id /T /F 2>$null | Out-Null
 
         if (-not $healthy) {
-          Write-Error "Smoke test FAILED - backend did not respond in 45s"
-          Write-Host "=== stdout ==="
-          Get-Content $outFile -ErrorAction SilentlyContinue
-          Write-Host "=== stderr ==="
-          Get-Content $errFile -ErrorAction SilentlyContinue
+          Write-Error "Smoke test FAILED - backend did not respond in 60s"
           exit 1
         }
       shell: pwsh
