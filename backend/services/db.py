@@ -5,11 +5,14 @@
 
 import sqlite3
 import aiosqlite
+import logging
 from pathlib import Path
 from typing import Any, Optional
 from datetime import datetime
 
 from config.paths import is_frozen, get_base_dir
+
+logger = logging.getLogger(__name__)
 
 
 # 内嵌完整 schema，确保 frozen 模式下无需外部 SQL 文件即可初始化
@@ -193,9 +196,27 @@ class Database:
     
     async def _create_tables(self):
         """创建所有基础表（幂等，使用 IF NOT EXISTS）"""
-        await self.conn.executescript(_SCHEMA_SQL)
-        await self.conn.executescript(_DEFAULT_SETTINGS_SQL)
-        await self.conn.commit()
+        try:
+            await self.conn.executescript(_SCHEMA_SQL)
+            await self.conn.executescript(_DEFAULT_SETTINGS_SQL)
+            await self.conn.commit()
+            logger.info("[DB] All tables created successfully")
+        except Exception as e:
+            logger.error(f"[DB] _create_tables failed: {e}")
+            raise
+        
+        # Verify critical tables exist
+        try:
+            cursor = await self.conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('papers', 'settings', 'models')"
+            )
+            tables = [row[0] for row in await cursor.fetchall()]
+            logger.info(f"[DB] Verified tables exist: {tables}")
+            if 'settings' not in tables:
+                raise RuntimeError("settings table was not created")
+        except Exception as e:
+            logger.error(f"[DB] Table verification failed: {e}")
+            raise
     
     async def _run_migrations(self):
         """执行数据库迁移（仅开发模式）"""
