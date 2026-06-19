@@ -127,6 +127,16 @@ jobs:
         Copy-Item -Path $src -Destination $dst -Recurse -Force
         Write-Host "OK Copied backend to $dst"
         Get-ChildItem -Path $dst | ForEach-Object { Write-Host "  $($_.Name)" }
+
+        # Verify _internal directory (PyInstaller dependencies)
+        $internalDir = Join-Path $dst "_internal"
+        if (Test-Path $internalDir) {
+          $fileCount = (Get-ChildItem -Path $internalDir -Recurse -File).Count
+          Write-Host "OK _internal directory: $fileCount files"
+        } else {
+          Write-Error "_internal directory NOT FOUND in $dst"
+          exit 1
+        }
       shell: pwsh
 
     # ---- Root npm ----

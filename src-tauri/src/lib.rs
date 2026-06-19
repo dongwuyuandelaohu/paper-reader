@@ -4,6 +4,7 @@
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::fs;
+use std::io::Write;
 use std::time::Duration;
 use tauri::Manager;
 
@@ -12,6 +13,18 @@ use std::os::windows::process::CommandExt;
 
 struct AppState {
     backend_process: Arc<Mutex<Option<Child>>>,
+}
+
+/// Write diagnostic message directly to file (works in release mode).
+fn diag_log(msg: &str) {
+    if let Some(path) = resolve_log_path() {
+        if let Some(parent) = path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&path) {
+            let _ = writeln!(f, "[DIAG] {}", msg);
+        }
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -23,6 +36,7 @@ pub fn run() {
             backend_process: backend_process.clone(),
         })
         .setup(move |app| {
+            diag_log("=== PaperLens starting ===");
             start_backend(app, backend_process.clone())?;
 
             if cfg!(debug_assertions) {
@@ -51,6 +65,8 @@ fn start_backend<R: tauri::Runtime>(
     process: Arc<Mutex<Option<Child>>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let resource_dir = app.path().resource_dir()?;
+    diag_log(&format!("Resource dir: {:?}", resource_dir));
+
     // Tauri v2 bundles resources preserving directory structure from src-tauri/,
     // so "resources/backend/**/*" becomes "$RESOURCE/resources/backend/".
     // Try both paths: $RESOURCE/backend/main.exe and $RESOURCE/resources/backend/main.exe
@@ -63,29 +79,49 @@ fn start_backend<R: tauri::Runtime>(
     } else {
         resource_dir.join("backend").join("main.exe") // fallback for logging
     };
-    log::info!("Backend exe path: {:?}", backend_exe);
+    diag_log(&format!("Backend exe path: {:?}", backend_exe));
+    diag_log(&format!("Backend exe exists: {}", backend_exe.exists()));
 
     // Determine executable path and working directory
     let (exe_path, work_dir) = if backend_exe.exists() {
-        // Production: PyInstaller-built exe bundled as Tauri resource
         let work_dir = backend_exe.parent().unwrap().to_path_buf();
+        // Check _internal directory (PyInstaller onedir dependency dir)
+        let internal_dir = work_dir.join("_internal");
+        diag_log(&format!("Work dir: {:?}", work_dir));
+        diag_log(&format!("_internal exists: {}", internal_dir.exists()));
+        if internal_dir.exists() {
+            // Count files in _internal
+            if let Ok(entries) = fs::read_dir(&internal_dir) {
+                let count = entries.count();
+                diag_log(&format!("_internal file count: {}", count));
+            }
+        }
+        // List files in work_dir for diagnostics
+        if let Ok(entries) = fs::read_dir(&work_dir) {
+            let names: Vec<String> = entries
+                .filter_map(|e| e.ok())
+                .map(|e| e.file_name().to_string_lossy().to_string())
+                .collect();
+            diag_log(&format!("Work dir contents: {:?}", names));
+        }
         (backend_exe, work_dir)
     } else {
         // Development: run Python script directly
         let backend_dir = std::env::current_dir()?.join("backend");
         let main_py = backend_dir.join("main.py");
         if !main_py.exists() {
+            diag_log(&format!("Backend not found at {:?}", main_py));
             log::warn!("Backend not found at {:?}", main_py);
             return Ok(());
         }
+        diag_log(&format!("Dev mode, main.py: {:?}", main_py));
         (main_py, backend_dir)
     };
 
+    diag_log(&format!("Starting backend: {:?}", exe_path));
     log::info!("Starting backend: {:?}", exe_path);
 
-    // Redirect stdout/stderr to a log file to prevent pipe buffer overflow.
-    // If we used Stdio::piped() without draining, the pipe buffers would fill up
-    // and block the backend process.
+    // Redirect stdout/stderr to a log file
     let log_path = resolve_log_path();
     let log_file = if let Some(ref path) = log_path {
         if let Some(parent) = path.parent() {
@@ -112,10 +148,10 @@ fn start_backend<R: tauri::Runtime>(
     };
 
     let mut cmd = if exe_path.extension().map_or(false, |e| e == "exe") {
-        log::info!("Production mode: launching exe");
+        diag_log("Production mode: launching exe");
         Command::new(&exe_path)
     } else {
-        log::info!("Development mode: launching via python");
+        diag_log("Development mode: launching via python");
         let mut c = Command::new("python");
         c.arg(&exe_path);
         c
@@ -131,26 +167,29 @@ fn start_backend<R: tauri::Runtime>(
 
     match cmd.spawn() {
         Ok(child) => {
-            log::info!("Backend process started (PID: {})", child.id());
+            let pid = child.id();
+            diag_log(&format!("Backend process started (PID: {})", pid));
+            log::info!("Backend process started (PID: {})", pid);
             *process.lock().unwrap() = Some(child);
         }
         Err(e) => {
+            diag_log(&format!("Failed to start backend: {}", e));
             log::error!("Failed to start backend: {}", e);
             return Err(Box::new(e));
         }
     }
 
-    // Health check: poll until backend responds or timeout (30 seconds)
-    // Run in a separate thread to avoid blocking the UI
-    std::thread::spawn(|| {
-        wait_for_healthy();
+    // Health check in a separate thread
+    let proc_clone = process.clone();
+    std::thread::spawn(move || {
+        wait_for_healthy(proc_clone);
     });
 
     Ok(())
 }
 
 /// Poll the backend health endpoint until it responds 200 OK or timeout.
-fn wait_for_healthy() {
+fn wait_for_healthy(process: Arc<Mutex<Option<Child>>>) {
     let url = "http://localhost:8765/api/v1/system/health";
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(2))
@@ -159,25 +198,39 @@ fn wait_for_healthy() {
 
     let max_attempts = 60; // 60 * 500ms = 30 seconds
     for i in 0..max_attempts {
+        // Check if backend process has exited
+        {
+            let mut guard = process.lock().unwrap();
+            if let Some(ref mut child) = *guard {
+                if let Ok(Some(status)) = child.try_wait() {
+                    diag_log(&format!("Backend process EXITED at attempt {} with status: {}", i + 1, status));
+                    // Process died - no point waiting
+                    return;
+                }
+            }
+        }
+
         match client.get(url).send() {
             Ok(resp) if resp.status().is_success() => {
+                diag_log(&format!("Backend healthy after {}ms", (i + 1) * 500));
                 log::info!("Backend healthy after {}ms", (i + 1) * 500);
                 return;
             }
             Ok(resp) => {
                 if i == 0 || i % 10 == 0 {
-                    log::debug!("Backend status: {}", resp.status());
+                    diag_log(&format!("Backend status: {} (attempt {}/{})", resp.status(), i + 1, max_attempts));
                 }
             }
-            Err(_) => {
+            Err(e) => {
                 if i == 0 || i % 10 == 0 {
-                    log::debug!("Waiting for backend... ({}/{})", i + 1, max_attempts);
+                    diag_log(&format!("Waiting for backend... ({}/{}): {}", i + 1, max_attempts, e));
                 }
             }
         }
         std::thread::sleep(Duration::from_millis(500));
     }
 
+    diag_log(&format!("Backend health check TIMED OUT after {}s", max_attempts / 2));
     log::warn!("Backend health check timed out after {}s", max_attempts / 2);
 }
 
@@ -201,24 +254,24 @@ fn resolve_log_path() -> Option<std::path::PathBuf> {
 fn stop_backend(process: Arc<Mutex<Option<Child>>>) {
     if let Some(mut child) = process.lock().unwrap().take() {
         let pid = child.id();
+        diag_log(&format!("Stopping backend (PID: {})", pid));
         log::info!("Stopping backend (PID: {})", pid);
 
-        // First try a clean kill
         let _ = child.kill();
 
-        // On Windows, use taskkill to kill the entire process tree
-        // (PyInstaller may spawn child processes)
         #[cfg(target_os = "windows")]
         {
             let _ = Command::new("taskkill")
                 .args(&["/PID", &pid.to_string(), "/T", "/F"])
-                .creation_flags(0x08000000) // CREATE_NO_WINDOW
+                .creation_flags(0x08000000)
                 .output();
         }
 
-        // Wait briefly for the process to exit
         match child.wait() {
-            Ok(status) => log::info!("Backend exited with status: {}", status),
+            Ok(status) => {
+                diag_log(&format!("Backend exited with status: {}", status));
+                log::info!("Backend exited with status: {}", status);
+            }
             Err(e) => log::warn!("Error waiting for backend exit: {}", e),
         }
     }
