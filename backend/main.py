@@ -15,9 +15,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 # 配置日志（强制 UTF-8，避免 Windows GBK 编码错误）
-import io
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
-sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace', line_buffering=True)
+try:
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    if hasattr(sys.stderr, 'reconfigure'):
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+except Exception:
+    pass
 
 logging.basicConfig(
     level=logging.INFO,
@@ -52,34 +56,34 @@ async def lifespan(app: FastAPI):
     await db.init()
     set_db(db)
     
-    print(f"✓ 数据库已连接: {db_path}")
+    print(f"[OK] DB connected: {db_path}")
     
     # 启动时检测所有引擎
-    print("⚙ 正在检测解析引擎...")
+    print("[*] Detecting engines...")
     engines = detect_engines()
     await save_engines_to_db(db, engines)
     
     available_count = sum(1 for e in engines.values() if e.get("available"))
-    print(f"✓ 引擎检测完成: {available_count}/{len(engines)} 个引擎可用")
+    print(f"[OK] Engines: {available_count}/{len(engines)} available")
     for name, info in engines.items():
-        status = "✓" if info["available"] else "✗"
+        status = "[OK]" if info["available"] else "[--]"
         version = f" (v{info['version']})" if info["version"] else ""
         print(f"  {status} {name}{version}")
     
-    print(f"✓ PaperLens 后端服务已启动")
+    print("[OK] PaperLens backend started")
     
     yield
     
     # 关闭时：清理资源
     await db.close()
-    print("✓ PaperLens 后端服务已关闭")
+    print("[OK] PaperLens backend stopped")
 
 
 # 创建 FastAPI 应用
 app = FastAPI(
     title="PaperLens API",
     description="论文双语阅读工具后端服务",
-    version="0.1.0",
+    version="0.1.2",
     lifespan=lifespan,
 )
 
@@ -124,7 +128,7 @@ async def root():
     
     return {
         "name": "PaperLens API",
-        "version": "0.1.0",
+        "version": "0.1.2",
         "docs": "/docs",
     }
 
@@ -154,7 +158,7 @@ if is_frozen():
             
             return {"detail": "Not found"}, 404
         
-        print(f"✓ 前端静态文件已挂载: {static_dir}")
+        print(f"[OK] Static files mounted: {static_dir}")
 
 
 if __name__ == "__main__":
