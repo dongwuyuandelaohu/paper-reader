@@ -23,51 +23,51 @@
         "binary": "marker-engine"
       },
       "windows-x86_64": {
-        "url": "https://github.com/paper-reader/engines/releases/download/marker-1.10.2/marker-engine-windows-x86_64.zip",
-        "sha256": "placeholder_sha256_hash",
-        "size_mb": 1500,
-        "binary": "marker-engine.exe"
+        "url": "https://github.com/dongwuyuandelaohu/paper-reader/releases/download/marker-1.10.2/marker-engine-v1.10.2-windows-x86_64.zip",
+        "sha256": "264008DE018AAFC8521B60F36BFEA138783C68F66EA15C188CCF7CD1C50C96A3",
+        "size_mb": 428,
+        "binary": "marker-engine.bat"
       }
     },
     "fallback_pip_package": "marker-pdf==1.10.2",
     "requirements": {
-      "python": ">=3.8,<3.12",
-      "system": "Requires Python environment with marker-pdf installed"
+      "python": ">=3.10,<3.14",
+      "system": "Requires Python 3.10+ for venv wrapper to work"
     }
   },
   "mineru": {
     "name": "MinerU",
     "description": "高精度文档解析引擎 (venv + wrapper)",
-    "version": "3.2.1",
+    "version": "3.2.0",
     "packages": {
       "darwin-arm64": {
-        "url": "https://github.com/paper-reader/engines/releases/download/mineru-3.2.1/mineru-engine-darwin-arm64.zip",
-        "sha256": "6ff7b9b37bc309faa13c72cef3e5201d5391572d5ae77781847d699aec62bc6f",
+        "url": "https://github.com/paper-reader/engines/releases/download/mineru-3.2.0/mineru-engine-darwin-arm64.zip",
+        "sha256": "placeholder_sha256_hash",
         "size_mb": 504,
         "binary": "mineru-engine"
       },
       "darwin-x86_64": {
-        "url": "https://github.com/paper-reader/engines/releases/download/mineru-3.2.1/mineru-engine-darwin-x86_64.zip",
+        "url": "https://github.com/paper-reader/engines/releases/download/mineru-3.2.0/mineru-engine-darwin-x86_64.zip",
         "sha256": "placeholder_sha256_hash",
         "size_mb": 3800,
         "binary": "mineru-engine"
       },
       "linux-x86_64": {
-        "url": "https://github.com/paper-reader/engines/releases/download/mineru-3.2.1/mineru-engine-linux-x86_64.zip",
+        "url": "https://github.com/paper-reader/engines/releases/download/mineru-3.2.0/mineru-engine-linux-x86_64.zip",
         "sha256": "placeholder_sha256_hash",
         "size_mb": 4000,
         "binary": "mineru-engine"
       },
       "windows-x86_64": {
-        "url": "https://github.com/paper-reader/engines/releases/download/mineru-3.2.1/mineru-engine-windows-x86_64.zip",
-        "sha256": "placeholder_sha256_hash",
-        "size_mb": 3500,
+        "url": "https://github.com/dongwuyuandelaohu/paper-reader/releases/download/mineru-3.2.0/mineru-engine-v3.2.0-windows-x86_64.zip",
+        "sha256": "6931D7A6DFD94C6FE211525F874557DE52BE563678F0D6F7863365E6A4DDBA15",
+        "size_mb": 635,
         "binary": "mineru-engine.bat"
       }
     },
-    "fallback_pip_package": "mineru[all]==3.2.1",
+    "fallback_pip_package": "mineru[all]==3.2.0",
     "requirements": {
-      "python": ">=3.10,<=3.13",
+      "python": ">=3.10,<3.14",
       "system": "Requires Python 3.10+ for venv wrapper to work"
     }
   }

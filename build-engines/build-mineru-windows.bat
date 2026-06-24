@@ -5,12 +5,12 @@ REM ===============================================================
 REM MinerU Engine Windows Build (venv + wrapper, pinned torch)
 REM ===============================================================
 REM Mirrors build-marker-venv-windows.bat structure.
-REM Notes for MinerU 3.2.1:
-REM   - Uses python -m mineru entry (MinerU CLI)
+REM Notes for MinerU 3.2.0:
+REM   - Entry point: mineru.exe (console_scripts)
 REM   - Defaults model source to ModelScope (China-friendly)
 REM ===============================================================
 
-set "MINERU_VERSION=3.2.1"
+set "MINERU_VERSION=3.2.0"
 set "TORCH_VERSION=2.7.1"
 
 echo === MinerU Engine Windows Build ===
@@ -71,9 +71,16 @@ echo [3/6] Installing dependencies (this may take several minutes)...
 set "PIP=!ENGINE_DIR!\.venv\Scripts\pip.exe"
 set "PYTHON_EXE=!ENGINE_DIR!\.venv\Scripts\python.exe"
 
-REM Skip pip self-upgrade (modern pip refuses direct pip.exe upgrade;
-REM venv's bundled pip 23.0.1 is already good enough for installs).
-echo     - using venv pip: !PIP!
+REM Upgrade pip first (venv's bundled pip 23.0.1 is too old to resolve
+REM newer package metadata; use python -m pip to avoid the "can't
+REM modify pip directly" error).
+echo     - upgrading pip (via python -m pip)...
+"!PYTHON_EXE!" -m pip install --upgrade pip --quiet
+if errorlevel 1 (
+    echo     ERROR: pip upgrade failed
+    exit /b 1
+)
+echo     - using pip: !PIP!
 
 echo     - torch==%TORCH_VERSION% (CPU build from PyPI)
 "!PIP!" install torch==%TORCH_VERSION%
@@ -83,7 +90,8 @@ if errorlevel 1 (
 )
 
 echo     - mineru[all]==%MINERU_VERSION% (pip will resolve paddlepaddle + others)
-"!PIP!" install "mineru[all]==%MINERU_VERSION%"
+echo       NOTE: forcing torch==%TORCH_VERSION% to avoid pip re-downloading 2.8.0
+"!PIP!" install "mineru[all]==%MINERU_VERSION%" torch==%TORCH_VERSION% scipy
 if errorlevel 1 (
     echo     ERROR: mineru install failed
     exit /b 1
@@ -92,12 +100,12 @@ if errorlevel 1 (
 REM ==================== 4. Verify mineru ====================
 echo.
 echo [4/6] Verifying mineru works...
-"!PYTHON_EXE!" -m mineru --version >nul 2>&1
+"!ENGINE_DIR!\.venv\Scripts\mineru.exe" --version >nul 2>&1
 if errorlevel 1 (
-    echo     ERROR: mineru failed to start. Check the error above.
+    echo     ERROR: mineru.exe failed to start. Check the error above.
     exit /b 1
 )
-echo     python -m mineru is working
+echo     mineru.exe is working
 
 REM Show installed versions
 echo.

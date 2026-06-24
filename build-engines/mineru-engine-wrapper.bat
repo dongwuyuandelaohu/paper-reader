@@ -3,18 +3,18 @@ setlocal
 
 REM ===============================================================
 REM MinerU Engine Wrapper for Windows (simplified)
-REM  - Calls the venv's mineru CLI via python -m
+REM  - Calls the venv's mineru.exe directly
 REM  - No Python version detection needed (venv was built with 3.10+)
 REM  - Sets HF_HOME and MINERU_MODEL_SOURCE for downloads
 REM ===============================================================
 
 set "SCRIPT_DIR=%~dp0"
-set "VENV_PY=%SCRIPT_DIR%.venv\Scripts\python.exe"
+set "MINERU_EXE=%SCRIPT_DIR%.venv\Scripts\mineru.exe"
 
 REM Sanity check
-if not exist "%VENV_PY%" (
-    echo [MinerU] ERROR: python.exe not found in venv at:
-    echo   %VENV_PY%
+if not exist "%MINERU_EXE%" (
+    echo [MinerU] ERROR: mineru.exe not found in venv at:
+    echo   %MINERU_EXE%
     echo Please reinstall this engine.
     exit /b 1
 )
@@ -41,5 +41,5 @@ echo [MinerU] MinerU cache:     %MINERU_CACHE_DIR%
 echo [MinerU] Model source:    %MINERU_MODEL_SOURCE%
 echo [MinerU] HF endpoint:     %HF_ENDPOINT%
 
-REM Run mineru CLI via the venv's Python (MinerU 3.x has python -m mineru entry)
-"%VENV_PY%" -m mineru %*
+REM Run mineru CLI
+"%MINERU_EXE%" %*
