@@ -32,25 +32,32 @@ class MarkerEngine:
         user_engines_dir = Path.home() / ".paperlens" / "engines"
         isolated_marker = user_engines_dir / "marker-engine"
         if sys.platform == "win32":
-            isolated_marker_exe = isolated_marker / "marker-engine.exe"
+            # Windows: 优先 .exe (PyInstaller)，回退到 .bat (venv wrapper)
+            for ext in [".exe", ".bat"]:
+                exe = isolated_marker / f"marker-engine{ext}"
+                if exe.exists():
+                    logger.info(f"[MARKER] 使用独立打包的引擎: {exe}")
+                    return str(exe)
         else:
-            isolated_marker_exe = isolated_marker / "marker-engine"
-        
-        if isolated_marker_exe.exists():
-            logger.info(f"[MARKER] 使用独立打包的引擎: {isolated_marker_exe}")
-            return str(isolated_marker_exe)
+            exe = isolated_marker / "marker-engine"
+            if exe.exists():
+                logger.info(f"[MARKER] 使用独立打包的引擎: {exe}")
+                return str(exe)
 
         # 2. 检查独立打包的引擎（应用目录）
         app_dir = Path(__file__).parent.parent.parent
         app_marker = app_dir / "engines" / "marker-engine"
         if sys.platform == "win32":
-            app_marker_exe = app_marker / "marker-engine.exe"
+            for ext in [".exe", ".bat"]:
+                exe = app_marker / f"marker-engine{ext}"
+                if exe.exists():
+                    logger.info(f"[MARKER] 使用应用目录的引擎: {exe}")
+                    return str(exe)
         else:
-            app_marker_exe = app_marker / "marker-engine"
-        
-        if app_marker_exe.exists():
-            logger.info(f"[MARKER] 使用应用目录的引擎: {app_marker_exe}")
-            return str(app_marker_exe)
+            exe = app_marker / "marker-engine"
+            if exe.exists():
+                logger.info(f"[MARKER] 使用应用目录的引擎: {exe}")
+                return str(exe)
 
         # 3. 回退到系统安装的 marker_single
         system_marker = shutil.which("marker_single")
@@ -89,7 +96,9 @@ class MarkerEngine:
                 cmd.append("--disable_multiprocessing")
 
             logger.info(f"[MARKER] Command: {' '.join(cmd)}")
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+            # .bat files on Windows need shell=True
+            use_shell = marker_cmd.lower().endswith(".bat")
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800, shell=use_shell)
 
             if result.returncode != 0:
                 logger.error(f"[MARKER] Failed: {result.stderr}")

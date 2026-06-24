@@ -97,7 +97,9 @@ class MinerUEngine:
             ]
 
             logger.info(f"[MINERU] Running: {' '.join(cmd)}")
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+            # .bat files on Windows need shell=True
+            use_shell = mineru_cmd.lower().endswith(".bat")
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800, shell=use_shell)
 
             if result.returncode != 0:
                 logger.error(f"[MINERU] Failed (code {result.returncode})")
