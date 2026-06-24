@@ -93,8 +93,9 @@ class MinerUEngine:
                 "-p", pdf_path,
                 "-o", str(temp_output),
                 "-m", "auto",
-                "-b", "pipeline",
             ]
+            # Don't pass -b flag here; the wrapper script will auto-detect CUDA
+            # and choose the appropriate backend (pipeline for CPU, hybrid for GPU)
 
             logger.info(f"[MINERU] Running: {' '.join(cmd)}")
             # .bat files on Windows need shell=True

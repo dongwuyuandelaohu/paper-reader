@@ -10,12 +10,12 @@ REM ===============================================================
 
 set "SCRIPT_DIR=%~dp0"
 set "VENV_DIR=%SCRIPT_DIR%.venv"
-set "MARKER_EXE=%VENV_DIR%\Scripts\marker_single.exe"
+set "PYTHON_EXE=%VENV_DIR%\Scripts\python.exe"
 
-REM Sanity check
-if not exist "%MARKER_EXE%" (
-    echo [Marker] ERROR: marker_single.exe not found at:
-    echo   %MARKER_EXE%
+REM Sanity check - use python.exe instead of marker_single.exe to avoid hardcoded path issues
+if not exist "%PYTHON_EXE%" (
+    echo [Marker] ERROR: python.exe not found at:
+    echo   %PYTHON_EXE%
     echo Please reinstall this engine.
     exit /b 1
 )
@@ -49,5 +49,5 @@ echo [Marker] HF_HOME:       %HF_HOME%
 echo [Marker] DATALAB cache: %MODEL_CACHE_DIR%
 echo [Marker] HF_ENDPOINT:   %HF_ENDPOINT%
 
-REM Run marker CLI
-"%MARKER_EXE%" %*
+REM Run marker CLI via python.exe (avoids hardcoded path issues in marker_single.exe)
+"%PYTHON_EXE%" -c "from marker.scripts.convert_single import convert_single_cli; convert_single_cli()" %*
