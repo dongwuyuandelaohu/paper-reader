@@ -277,7 +277,7 @@ class EngineInstaller:
             elif engine_name == "mineru":
                 report("安装 MinerU 依赖 (这可能需要 5-10 分钟)...", 30)
                 subprocess.run(
-                    [str(pip_exe), "install", "mineru[all]==3.2.1"],
+                    [str(pip_exe), "install", "mineru[all]==3.2.0"],
                     check=True,
                     capture_output=True,
                 )

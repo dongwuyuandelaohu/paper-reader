@@ -128,11 +128,11 @@ class MarkerEngine:
                 with open(meta_file, 'r', encoding='utf-8') as f:
                     meta_data = json.load(f)
 
-            # 复制图片
+            # 复制图片（包括子目录）
             images_dir = self.output_dir / "images"
             images_dir.mkdir(parents=True, exist_ok=True)
-            for img_file in paper_output.glob("*.*"):
-                if img_file.suffix.lower() in [".jpg", ".jpeg", ".png", ".gif", ".webp"]:
+            for img_file in paper_output.rglob("*"):
+                if img_file.is_file() and img_file.suffix.lower() in [".jpg", ".jpeg", ".png", ".gif", ".webp"]:
                     shutil.copy2(img_file, images_dir / img_file.name)
 
             # 按页拆分
