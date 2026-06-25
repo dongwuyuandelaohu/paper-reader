@@ -4,10 +4,13 @@ AI 服务层
 """
 
 import json
+import logging
 import time
 from typing import AsyncGenerator, Optional
 
 from openai import AsyncOpenAI
+
+logger = logging.getLogger("paperlens.ai")
 
 
 class AIService:
