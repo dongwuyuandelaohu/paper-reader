@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { system } from '@/api/client'
+import { engines, system, API_BASE } from '@/api/client'
 
 interface EngineInfo {
   name: string
@@ -88,7 +88,7 @@ export function EngineModal({
       await system.installEngine(engineName)
       
       // Connect to SSE for progress updates
-      const eventSource = new EventSource(`/api/v1/system/engines/${engineName}/install/status`)
+      const eventSource = new EventSource(`${API_BASE}/system/engines/${engineName}/install/status`)
       eventSourceRefs.current[engineName] = eventSource
 
       eventSource.onmessage = async (event) => {

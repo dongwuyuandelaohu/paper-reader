@@ -13,6 +13,8 @@ import logging
 from pathlib import Path
 from typing import Optional
 
+from config.paths import get_api_base_url
+
 logger = logging.getLogger("paperlens.parse")
 
 
@@ -220,10 +222,10 @@ class MarkerEngine:
         def replace_img(match):
             alt_text = match.group(1)
             img_path = match.group(2)
-            if img_path.startswith(('http://', 'https://', '/api/', 'data:')):
+            if img_path.startswith(('http://', 'https://', 'data:')):
                 return match.group(0)
             img_filename = Path(img_path).name
-            new_url = f"/api/v1/parse/{paper_id}/images/{img_filename}"
+            new_url = f"{get_api_base_url()}/parse/{paper_id}/images/{img_filename}"
             return f"![{alt_text}]({new_url})"
 
         return re.sub(r'!\[([^\]]*)\]\(([^\)]+)\)', replace_img, markdown)
@@ -238,8 +240,8 @@ class MarkerEngine:
                 "filename": img_filename,
                 "page": page_num + 1,
                 "alt_text": alt_text,
-                "url": f"/api/v1/parse/{paper_id}/images/{img_filename}",
-                "markdown": f"![{alt_text}](/api/v1/parse/{paper_id}/images/{img_filename})",
+                "url": f"{get_api_base_url()}/parse/{paper_id}/images/{img_filename}",
+                "markdown": f"![{alt_text}]({get_api_base_url()}/parse/{paper_id}/images/{img_filename})",
             })
         return images
 

@@ -139,6 +139,11 @@ a = Analysis(
         'magic_pdf',
         'paddle',
         'paddleocr',
+        # Exclude unused timezone data (reduces file count by 1200+)
+        'pytz',
+        'tzdata',
+        'dateutil',
+        'pandas',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,

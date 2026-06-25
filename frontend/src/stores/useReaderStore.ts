@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { papers, parse, translate } from '@/api/client'
+import { papers, parse, translate, API_BASE } from '@/api/client'
 import type { Paper, ParsedPage, ParseStatus } from '@/api/types'
 
 // 请求去重变量
@@ -279,7 +279,7 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
     set({ translatingPages: newTranslatingPages })
 
     // 启动后台翻译（不阻塞 UI）
-    fetch(`/api/v1/translate/${paper.id}/pages/${targetPage}`, {
+    fetch(`${API_BASE}/translate/${paper.id}/pages/${targetPage}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
@@ -370,7 +370,7 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
     let content = ''
     
     try {
-      const res = await fetch(`/api/v1/translate/${paperId}/pages/${pageNumber}`, {
+      const res = await fetch(`${API_BASE}/translate/${paperId}/pages/${pageNumber}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model_id: modelId, engine }),

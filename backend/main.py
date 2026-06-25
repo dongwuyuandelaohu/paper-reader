@@ -163,9 +163,21 @@ if is_frozen():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(
-        app,
-        host="0.0.0.0",
-        port=8765,
-        reload=not is_frozen(),  # 打包后禁用热重载
-    )
+    if is_frozen():
+        # 打包后：直接传 app 对象，禁用热重载
+        uvicorn.run(
+            app,
+            host="0.0.0.0",
+            port=8765,
+            reload=False,
+        )
+    else:
+        # 开发模式：必须传字符串 "main:app" 才能启用 reload
+        reload_dirs = [str(Path(__file__).parent)]  # 只监控 backend/ 目录
+        uvicorn.run(
+            "main:app",
+            host="0.0.0.0",
+            port=8765,
+            reload=True,
+            reload_dirs=reload_dirs,
+        )

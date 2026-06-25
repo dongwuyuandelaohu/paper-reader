@@ -12,6 +12,8 @@ import logging
 from pathlib import Path
 from typing import Optional
 
+from config.paths import get_api_base_url
+
 logger = logging.getLogger("paperlens.parse")
 
 
@@ -193,7 +195,7 @@ class MinerUEngine:
 
                 if img_path:
                     img_filename = Path(img_path).name
-                    img_url = f"/api/v1/parse/{paper_id}/images/{img_filename}"
+                    img_url = f"{get_api_base_url()}/parse/{paper_id}/images/{img_filename}"
                     pages[page_idx].append(f'<p align="center">')
                     pages[page_idx].append(f'  <img src="{img_url}" alt="figure" width="80%">')
                     pages[page_idx].append(f'</p>')
@@ -212,7 +214,7 @@ class MinerUEngine:
 
                 if img_path:
                     img_filename = Path(img_path).name
-                    img_url = f"/api/v1/parse/{paper_id}/images/{img_filename}"
+                    img_url = f"{get_api_base_url()}/parse/{paper_id}/images/{img_filename}"
                     pages[page_idx].append(f'<p align="center">')
                     pages[page_idx].append(f'  <img src="{img_url}" alt="table" width="80%">')
                     pages[page_idx].append(f'</p>\n')
@@ -223,7 +225,7 @@ class MinerUEngine:
 
                 if img_path:
                     img_filename = Path(img_path).name
-                    img_url = f"/api/v1/parse/{paper_id}/images/{img_filename}"
+                    img_url = f"{get_api_base_url()}/parse/{paper_id}/images/{img_filename}"
                     pages[page_idx].append(f'<p align="center">')
                     pages[page_idx].append(f'  <img src="{img_url}" alt="equation" width="60%">')
                     pages[page_idx].append(f'</p>')
@@ -284,8 +286,8 @@ class MinerUEngine:
                 "filename": img_filename,
                 "page": page_num + 1,
                 "alt_text": alt_text,
-                "url": f"/api/v1/parse/{paper_id}/images/{img_filename}",
-                "markdown": f"![{alt_text}](/api/v1/parse/{paper_id}/images/{img_filename})",
+                "url": f"{get_api_base_url()}/parse/{paper_id}/images/{img_filename}",
+                "markdown": f"![{alt_text}]({get_api_base_url()}/parse/{paper_id}/images/{img_filename})",
             })
         return images
 

@@ -72,7 +72,9 @@ def get_temp_dir():
     return temp_dir
 
 
-# 导出便捷函数
+def get_api_base_url() -> str:
+    """获取后端 API 基础 URL（供引擎生成图片完整 URL 使用）"""
+    return "http://localhost:8765/api/v1"
 BASE_DIR = get_base_dir()
 DATA_DIR = get_data_dir()
 DB_PATH = get_db_path()

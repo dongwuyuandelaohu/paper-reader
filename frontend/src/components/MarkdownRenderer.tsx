@@ -2,6 +2,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
 import type { Components } from 'react-markdown'
+import { API_BASE } from '@/api/client'
 
 interface MarkdownRendererProps {
   content: string
@@ -10,12 +11,27 @@ interface MarkdownRendererProps {
 }
 
 function processContent(content: string, paperId: string): string {
-  // Rewrite markdown image URLs: ![alt](filename) → ![alt](/api/v1/parse/{paperId}/images/{filename})
-  // Skip URLs that already start with http(s) or /api/ (e.g., MinerU full API paths)
-  return content.replace(
-    /!\[([^\]]*)\]\((?!https?:\/\/|\/api\/)([^)]+)\)/g,
-    (_match, alt, src) => `![${alt}](/api/v1/parse/${paperId}/images/${src})`
+  const prefix = API_BASE.replace(/\/$/, '')
+
+  // 1. 将旧数据的相对 /api/v1 路径补全为完整 URL（兼容旧数据）- markdown 图片
+  content = content.replace(
+    /!\[([^\]]*)\]\(\/api\/v1\/parse\/([^/]+)\/images\/([^)]+)\)/g,
+    `![$1](${prefix}/parse/$2/images/$3)`
   )
+
+  // 2. 将旧数据的相对 /api/v1 路径补全为完整 URL（兼容旧数据）- HTML img 标签
+  content = content.replace(
+    /<img([^>]+)src=(["']?)\/?api\/v1\/parse\/([^/]+)\/images\/([^"']+)\2/g,
+    `<img$1src="${prefix}/parse/$3/images/$4"`
+  )
+
+  // 3. 将纯文件名 markdown 图片替换为完整 API URL
+  content = content.replace(
+    /!\[([^\]]*)\]\((?!https?:\/\/|data:|\/api\/)([^)]+)\)/g,
+    (_match, alt, src) => `![${alt}](${API_BASE}/parse/${paperId}/images/${src})`
+  )
+
+  return content
 }
 
 function renderMathBlock(content: string): string {

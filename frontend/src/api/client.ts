@@ -6,7 +6,7 @@ import type {
 
 // 开发环境使用相对路径（Vite 代理），生产环境使用绝对路径
 const isDev = import.meta.env.DEV
-const API_BASE = isDev ? '/api/v1' : 'http://localhost:8765/api/v1'
+export const API_BASE = isDev ? '/api/v1' : 'http://localhost:8765/api/v1'
 
 /**
  * 等待后端就绪（最多等待 15 秒）

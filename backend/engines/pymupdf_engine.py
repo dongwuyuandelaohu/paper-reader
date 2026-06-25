@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Optional
 import base64
 
+from config.paths import get_api_base_url
+
 
 class PyMuPDFEngine:
     """PyMuPDF 解析引擎"""
@@ -260,7 +262,7 @@ class PyMuPDFEngine:
                     img_path = self.output_dir / img_filename
                     with open(img_path, "wb") as f:
                         f.write(img_bytes)
-                    img_url = f"/api/v1/parse/{paper_id}/images/{img_filename}"
+                    img_url = f"{get_api_base_url()}/parse/{paper_id}/images/{img_filename}"
                 else:
                     import base64
                     img_base64 = base64.b64encode(img_bytes).decode("utf-8")
@@ -294,7 +296,7 @@ class PyMuPDFEngine:
                 img_path = self.output_dir / img_filename
                 with open(img_path, "wb") as f:
                     f.write(img_bytes)
-                img_url = f"/api/v1/parse/{paper_id}/images/{img_filename}"
+                img_url = f"{get_api_base_url()}/parse/{paper_id}/images/{img_filename}"
             else:
                 img_base64 = base64.b64encode(img_bytes).decode("utf-8")
                 img_url = f"data:image/png;base64,{img_base64}"
