@@ -90,12 +90,15 @@ class MarkerEngine:
                 pdf_path,
                 "--output_dir", str(temp_output),
                 "--output_format", "markdown",
-                "--paginate_output",
             ]
             
-            # 如果是独立打包的引擎，自动添加单进程参数
-            if "marker-engine" in marker_cmd and "--disable_multiprocessing" not in cmd:
+            # PyInstaller 打包的 exe 多进程容易出问题，强制单进程；venv 版本保持默认
+            if marker_cmd.lower().endswith(".exe") and "--disable_multiprocessing" not in cmd:
                 cmd.append("--disable_multiprocessing")
+            
+            # 仅对 PyInstaller 版本添加分页输出（如果支持）
+            if marker_cmd.lower().endswith(".exe") and "--paginate_output" not in cmd:
+                cmd.append("--paginate_output")
 
             logger.info(f"[MARKER] Command: {' '.join(cmd)}")
             # .bat files on Windows need shell=True

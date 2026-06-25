@@ -57,6 +57,9 @@ class AIService:
         tokens_input = 0
         tokens_output = 0
         
+        # 记录首包时间用于诊断
+        first_token_time = None
+        
         try:
             stream = await self.client.chat.completions.create(
                 model=self.model_id,
@@ -64,21 +67,20 @@ class AIService:
                 temperature=temperature,
                 max_tokens=max_tokens,
                 stream=True,
-                stream_options={"include_usage": True},
             )
-        except Exception:
-            stream = await self.client.chat.completions.create(
-                model=self.model_id,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                stream=True,
-            )
+        except Exception as e:
+            raise
         
         async for chunk in stream:
             if chunk.choices and chunk.choices[0].delta.content:
                 content = chunk.choices[0].delta.content
                 full_content += content
+                if first_token_time is None:
+                    first_token_time = time.time()
+                    logger.info(
+                        f"[Translate] First token received after "
+                        f"{first_token_time - start_time:.2f}s"
+                    )
                 yield {
                     "type": "content",
                     "content": content,

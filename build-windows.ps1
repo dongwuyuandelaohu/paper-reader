@@ -2,15 +2,18 @@
 # 此脚本在 Windows 上自动构建完整的桌面应用
 #
 # 使用方法:
-#   .\build-windows.ps1              # 完整构建
+#   .\build-windows.ps1              # 只构建 exe（默认）
+#   .\build-windows.ps1 -Bundle      # 构建 exe + MSI/NSIS 安装包
+#   .\build-windows.ps1 -Clean       # 清理后重新构建
 #   .\build-windows.ps1 -SkipFrontend  # 跳过前端构建
 #   .\build-windows.ps1 -SkipBackend   # 跳过后端构建
-#   .\build-windows.ps1 -Clean         # 清理后重新构建
+#   .\build-windows.ps1 -SkipTauri      # 跳过 Tauri 构建
 
 param(
     [switch]$SkipFrontend,
     [switch]$SkipBackend,
     [switch]$SkipTauri,
+    [switch]$Bundle,
     [switch]$Clean
 )
 
@@ -129,8 +132,12 @@ if (-not $SkipBackend) {
 if (-not $SkipTauri) {
     Write-Host "[3/3] Building Tauri app..." -ForegroundColor Yellow
 
-    Write-Host "  Compiling Rust + bundling..." -ForegroundColor Gray
-    npx tauri build --bundles msi,nsis
+    Write-Host "  Compiling Rust..." -ForegroundColor Gray
+    if ($Bundle) {
+        npx tauri build --bundles msi,nsis
+    } else {
+        npx tauri build
+    }
 
     Write-Host "  OK Tauri build complete" -ForegroundColor Green
     Write-Host ""
@@ -142,27 +149,38 @@ Write-Host "  Build complete!" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
-$msiFiles  = Get-ChildItem -Path "src-tauri/target/release/bundle/msi"  -Filter "*.msi" -ErrorAction SilentlyContinue
-$nsisFiles = Get-ChildItem -Path "src-tauri/target/release/bundle/nsis" -Filter "*.exe" -ErrorAction SilentlyContinue
-
-if ($msiFiles) {
-    Write-Host "MSI installer:" -ForegroundColor Yellow
-    foreach ($file in $msiFiles) {
-        $size = [math]::Round($file.Length / 1MB, 2)
-        Write-Host "  $([char]0x1F4E6) $($file.Name) ($size MB)" -ForegroundColor White
-        Write-Host "     $($file.FullName)" -ForegroundColor Gray
-    }
+$exePath = "src-tauri/target/release/paperlens.exe"
+if (Test-Path $exePath) {
+    $size = [math]::Round((Get-Item $exePath).Length / 1MB, 2)
+    Write-Host "EXE:" -ForegroundColor Yellow
+    Write-Host "  paperlens.exe ($size MB)" -ForegroundColor White
+    Write-Host "     $((Resolve-Path $exePath).Path)" -ForegroundColor Gray
     Write-Host ""
 }
 
-if ($nsisFiles) {
-    Write-Host "NSIS installer:" -ForegroundColor Yellow
-    foreach ($file in $nsisFiles) {
-        $size = [math]::Round($file.Length / 1MB, 2)
-        Write-Host "  $([char]0x1F4E6) $($file.Name) ($size MB)" -ForegroundColor White
-        Write-Host "     $($file.FullName)" -ForegroundColor Gray
+if ($Bundle) {
+    $msiFiles  = Get-ChildItem -Path "src-tauri/target/release/bundle/msi"  -Filter "*.msi" -ErrorAction SilentlyContinue
+    $nsisFiles = Get-ChildItem -Path "src-tauri/target/release/bundle/nsis" -Filter "*.exe" -ErrorAction SilentlyContinue
+
+    if ($msiFiles) {
+        Write-Host "MSI installer:" -ForegroundColor Yellow
+        foreach ($file in $msiFiles) {
+            $size = [math]::Round($file.Length / 1MB, 2)
+            Write-Host "  $([char]0x1F4E6) $($file.Name) ($size MB)" -ForegroundColor White
+            Write-Host "     $($file.FullName)" -ForegroundColor Gray
+        }
+        Write-Host ""
     }
-    Write-Host ""
+
+    if ($nsisFiles) {
+        Write-Host "NSIS installer:" -ForegroundColor Yellow
+        foreach ($file in $nsisFiles) {
+            $size = [math]::Round($file.Length / 1MB, 2)
+            Write-Host "  $([char]0x1F4E6) $($file.Name) ($size MB)" -ForegroundColor White
+            Write-Host "     $($file.FullName)" -ForegroundColor Gray
+        }
+        Write-Host ""
+    }
 }
 
 Write-Host "Next steps:" -ForegroundColor Cyan
