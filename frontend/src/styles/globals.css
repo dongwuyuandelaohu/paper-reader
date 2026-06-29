@@ -7,11 +7,18 @@
   to { transform: rotate(360deg); }
 }
 
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
 /* ========== PaperLens Design Tokens ========== */
 :root {
   /* Light theme (library, models, settings) */
   --bg: #f5f4ed;
   --surface: #faf9f5;
+  --surface2: #efede5;
+  --surface3: #e8e6dc;
   --white: #ffffff;
   --sand: #e8e6dc;
   --fg: #141413;
@@ -47,7 +54,7 @@
   --surface2: #262624;
   --surface3: #30302e;
   --white: #ffffff;
-  --sand: #e8e6dc;
+  --sand: #262624;
   --fg: #faf9f5;
   --fg2: #e8e6dc;
   --muted: #b0aea5;
@@ -63,8 +70,8 @@
   --focus: #3898ec;
   --error: #b53333;
   --error-bg: rgba(181,51,51,0.1);
-  --ring: #d1cfc5;
-  --ring-deep: #c2c0b6;
+  --ring: #3d3d3a;
+  --ring-deep: #30302e;
   --success: #4ade80;
   --success-bg: rgba(74,222,128,0.1);
   --warn: #fbbf24;
@@ -92,3 +99,25 @@ body {
 
 .theme-dark ::-webkit-scrollbar-thumb { background: var(--border2); }
 .theme-dark ::-webkit-scrollbar-thumb:hover { background: var(--dark); }
+
+/* ========== Dark mode native form elements ========== */
+/* 原生 select 的 option 下拉项在暗色主题下默认是白底黑字，这里修正 */
+.theme-dark select option {
+  background: var(--surface2);
+  color: var(--fg);
+}
+.theme-dark select option:hover,
+.theme-dark select option:checked {
+  background: var(--surface3);
+  color: var(--coral);
+}
+/* 原生 input/textarea 在暗色主题下统一配色 */
+.theme-dark input,
+.theme-dark textarea {
+  background: var(--surface2);
+  color: var(--fg);
+}
+.theme-dark input::placeholder,
+.theme-dark textarea::placeholder {
+  color: var(--stone);
+}

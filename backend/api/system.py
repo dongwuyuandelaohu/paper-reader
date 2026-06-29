@@ -6,13 +6,16 @@
 import logging
 import asyncio
 import json
-from typing import Dict, Set
-from fastapi import APIRouter, Depends, HTTPException
+import shutil
+from pathlib import Path
+from typing import Dict, Set, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from services.db import Database
 from services.dependencies import get_db
 from services.engine_detector import detect_engines, save_engines_to_db, load_engines_from_db
 from services.engine_installer import install_engine_background, get_install_status
+from config.paths import get_data_dir
 
 logger = logging.getLogger(__name__)
 
@@ -225,3 +228,94 @@ async def get_engine_install_status(engine_name: str, stream: bool = False):
             "Connection": "keep-alive",
         }
     )
+
+
+def _dir_size(path: Path) -> int:
+    """递归计算目录大小（字节）"""
+    if not path.exists():
+        return 0
+    total = 0
+    for f in path.rglob("*"):
+        if f.is_file():
+            try:
+                total += f.stat().st_size
+            except Exception:
+                pass
+    return total
+
+
+@router.get("/data-info")
+async def get_data_info(db: Database = Depends(get_db)):
+    """获取数据目录信息和缓存大小"""
+    data_dir = get_data_dir()
+
+    # 解析缓存大小（images 目录）
+    images_dir = data_dir / "images"
+    parse_cache_size = _dir_size(images_dir)
+
+    # 数据库大小
+    db_path = data_dir / "data.db"
+    db_size = db_path.stat().st_size if db_path.exists() else 0
+
+    # 论文文件大小
+    papers_dir = data_dir / "papers"
+    papers_size = _dir_size(papers_dir)
+
+    # 统计记录数
+    paper_count = 0
+    pages_count = 0
+    translations_count = 0
+    try:
+        r = await db.fetch_one("SELECT COUNT(*) as c FROM papers")
+        paper_count = r["c"] if r else 0
+        r = await db.fetch_one("SELECT COUNT(*) as c FROM paper_pages")
+        pages_count = r["c"] if r else 0
+        r = await db.fetch_one("SELECT COUNT(*) as c FROM translations")
+        translations_count = r["c"] if r else 0
+    except Exception:
+        pass
+
+    return {
+        "data_dir": str(data_dir),
+        "db_size": db_size,
+        "parse_cache_size": parse_cache_size,
+        "papers_size": papers_size,
+        "paper_count": paper_count,
+        "pages_count": pages_count,
+        "translations_count": translations_count,
+    }
+
+
+@router.post("/clear-cache")
+async def clear_cache(
+    type: str = Query("parse", regex="^(parse|translations|all)$"),
+    db: Database = Depends(get_db),
+):
+    """清理缓存
+
+    type=parse: 清理解析结果（paper_pages 表 + images 目录），保留论文文件
+    type=translations: 清理翻译缓存（translations 表）
+    type=all: 清理以上两者
+    """
+    data_dir = get_data_dir()
+    cleared = {}
+
+    if type in ("parse", "all"):
+        # 清空 paper_pages 表
+        await db.execute("DELETE FROM paper_pages")
+        # 重置论文解析状态
+        await db.execute("UPDATE papers SET pages_parsed = 0, parse_status = 'pending'")
+        # 删除 images 目录
+        images_dir = data_dir / "images"
+        if images_dir.exists():
+            shutil.rmtree(images_dir, ignore_errors=True)
+        cleared["parse"] = True
+
+    if type in ("translations", "all"):
+        # 清空 translations 表
+        await db.execute("DELETE FROM translations")
+        # 重置翻译计数
+        await db.execute("UPDATE papers SET pages_translated = 0")
+        cleared["translations"] = True
+
+    return {"status": "ok", "cleared": cleared}

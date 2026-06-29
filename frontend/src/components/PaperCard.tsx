@@ -1,5 +1,113 @@
+import { useEffect, useRef, useState } from 'react'
 import { Heart, Clock, FileText } from 'lucide-react'
+import * as pdfjsLib from 'pdfjs-dist'
+import { papers as papersApi } from '@/api/client'
 import type { Paper } from '../api/types'
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs'
+
+// 缩略图缓存：paperId -> dataURL
+const _thumbnailCache = new Map<string, string>()
+// 正在加载的缩略图：paperId -> Promise
+const _loadingThumbnails = new Map<string, Promise<string>>()
+
+/**
+ * 渲染 PDF 首页为缩略图 dataURL（带缓存，避免重复渲染）
+ */
+async function renderThumbnail(paperId: string, targetWidth = 240): Promise<string> {
+  if (_thumbnailCache.has(paperId)) return _thumbnailCache.get(paperId)!
+  if (_loadingThumbnails.has(paperId)) return _loadingThumbnails.get(paperId)!
+
+  const promise = (async () => {
+    const url = papersApi.getFileUrl(paperId)
+    const loadingTask = pdfjsLib.getDocument(url)
+    const doc = await loadingTask.promise
+    try {
+      const page = await doc.getPage(1)
+      // 按目标宽度计算缩放
+      const baseViewport = page.getViewport({ scale: 1 })
+      const scale = Math.min(targetWidth / baseViewport.width, 2)
+      const viewport = page.getViewport({ scale })
+      const canvas = document.createElement('canvas')
+      canvas.width = viewport.width
+      canvas.height = viewport.height
+      const ctx = canvas.getContext('2d')!
+      await page.render({ canvasContext: ctx, viewport }).promise
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
+      _thumbnailCache.set(paperId, dataUrl)
+      return dataUrl
+    } finally {
+      doc.destroy()
+    }
+  })()
+
+  _loadingThumbnails.set(paperId, promise)
+  try {
+    return await promise
+  } finally {
+    _loadingThumbnails.delete(paperId)
+  }
+}
+
+/**
+ * 论文缩略图组件：懒加载渲染 PDF 首页
+ */
+function PaperThumbnail({ paperId }: { paperId: string }) {
+  const [src, setSrc] = useState<string | null>(_thumbnailCache.get(paperId) || null)
+  const [failed, setFailed] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const loadedRef = useRef(false)
+
+  useEffect(() => {
+    if (src || loadedRef.current) return
+    const el = containerRef.current
+    if (!el) return
+
+    let cancelled = false
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && !loadedRef.current) {
+          loadedRef.current = true
+          observer.disconnect()
+          renderThumbnail(paperId)
+            .then((url) => { if (!cancelled) setSrc(url) })
+            .catch(() => { if (!cancelled) setFailed(true) })
+        }
+      },
+      { rootMargin: '200px' }
+    )
+    observer.observe(el)
+    return () => { cancelled = true; observer.disconnect() }
+  }, [paperId, src])
+
+  if (src) {
+    return (
+      <div ref={containerRef} style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <img src={src} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+      </div>
+    )
+  }
+
+  if (failed) {
+    return (
+      <div ref={containerRef} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '20px', width: '100%' }}>
+        <div style={{ height: '8px', background: 'var(--border2)', borderRadius: '4px', width: '80%' }} />
+        <div style={{ height: '8px', background: 'var(--border2)', borderRadius: '4px', width: '95%' }} />
+        <div style={{ height: '8px', background: 'var(--border2)', borderRadius: '4px', width: '70%' }} />
+        <div style={{ height: '8px', background: 'var(--border2)', borderRadius: '4px', width: '85%' }} />
+      </div>
+    )
+  }
+
+  return (
+    <div ref={containerRef} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '20px', width: '100%' }}>
+      <div style={{ height: '8px', background: 'var(--border2)', borderRadius: '4px', width: '80%', animation: 'pulse 1.5s ease-in-out infinite' }} />
+      <div style={{ height: '8px', background: 'var(--border2)', borderRadius: '4px', width: '95%', animation: 'pulse 1.5s ease-in-out infinite' }} />
+      <div style={{ height: '8px', background: 'var(--border2)', borderRadius: '4px', width: '70%', animation: 'pulse 1.5s ease-in-out infinite' }} />
+      <div style={{ height: '8px', background: 'var(--border2)', borderRadius: '4px', width: '85%', animation: 'pulse 1.5s ease-in-out infinite' }} />
+    </div>
+  )
+}
 
 interface PaperCardProps {
   paper: Paper
@@ -64,7 +172,7 @@ export function PaperCard({
       onClick={onClick}
       onContextMenu={onContextMenu}
       style={{
-        background: 'var(--white)',
+        background: 'var(--surface)',
         borderRadius: '10px',
         border: selected ? '2px solid var(--accent)' : '1px solid var(--border)',
         cursor: 'pointer',
@@ -120,20 +228,9 @@ export function PaperCard({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
+        overflow: 'hidden',
       }}>
-        {/* Placeholder lines */}
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '8px',
-          padding: '20px',
-          width: '100%',
-        }}>
-          <div style={{ height: '8px', background: 'var(--border2)', borderRadius: '4px', width: '80%' }} />
-          <div style={{ height: '8px', background: 'var(--border2)', borderRadius: '4px', width: '95%' }} />
-          <div style={{ height: '8px', background: 'var(--border2)', borderRadius: '4px', width: '70%' }} />
-          <div style={{ height: '8px', background: 'var(--border2)', borderRadius: '4px', width: '85%' }} />
-        </div>
+        <PaperThumbnail paperId={paper.id} />
 
         {/* Favorite Button */}
         <button
@@ -145,7 +242,7 @@ export function PaperCard({
             position: 'absolute',
             top: '8px',
             right: '8px',
-            background: 'var(--white)',
+            background: 'var(--surface)',
             border: 'none',
             borderRadius: '6px',
             padding: '6px',

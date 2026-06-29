@@ -36,6 +36,10 @@ class SetDefaultRequest(BaseModel):
     type: str  # "translate" or "chat"
 
 
+class ReorderModelsRequest(BaseModel):
+    model_ids: list[str]
+
+
 @router.get("")
 async def list_models(db: Database = Depends(get_db)):
     """获取模型列表"""
@@ -100,7 +104,7 @@ async def test_model(
     
     try:
         from services.ai import get_ai_service
-        ai_service = await get_ai_service(model)
+        ai_service = await get_ai_service(model, db)
         result = await ai_service.test_connection()
         
         if result["success"]:
@@ -150,6 +154,21 @@ async def delete_model(
 ):
     """删除模型"""
     await db.delete("models", model_id)
+    return {"status": "ok"}
+
+
+@router.put("/reorder")
+async def reorder_models(
+    data: ReorderModelsRequest,
+    db: Database = Depends(get_db),
+):
+    """批量调整模型排序"""
+    now = datetime.now().isoformat()
+    for index, model_id in enumerate(data.model_ids):
+        await db.update("models", model_id, {
+            "sort_order": index,
+            "updated_at": now,
+        })
     return {"status": "ok"}
 
 

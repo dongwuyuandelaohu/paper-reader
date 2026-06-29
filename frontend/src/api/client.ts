@@ -1,5 +1,5 @@
 import type {
-  PaperListResponse, Paper, Tag, AIModel, Note, GlossaryEntry,
+  PaperListResponse, Paper, Tag, AIModel, Note, GlossaryEntry, Highlight, Bookmark,
   Conversation, Message, ParsedPage, ParseStatus, Translation,
   Engine, Settings, SSEEvent
 } from './types'
@@ -89,6 +89,15 @@ export const papers = {
       body: form,
     })
   },
+  uploadFromUrl: (url: string, title?: string) =>
+    request<Paper>('/papers/upload-url', {
+      method: 'POST',
+      body: JSON.stringify({ url, title }),
+    }),
+  reextractMetadata: (id: string) =>
+    request<{ status: string; updated_fields: string[] }>(`/papers/${id}/metadata`, {
+      method: 'PATCH',
+    }),
   update: (id: string, data: { title?: string; is_favorite?: boolean }) =>
     request<{ status: string }>(`/papers/${id}`, {
       method: 'PATCH',
@@ -198,15 +207,24 @@ export const conversations = {
     }),
   stop: (conversationId: string) =>
     request<{ status: string }>(`/conversations/${conversationId}/stop`, { method: 'POST' }),
+  archive: (conversationId: string, archived: boolean) =>
+    request<{ status: string; archived: boolean }>(`/conversations/${conversationId}/archive`, {
+      method: 'PATCH',
+      body: JSON.stringify({ archived }),
+    }),
   delete: (conversationId: string) =>
     request<{ status: string }>(`/conversations/${conversationId}`, { method: 'DELETE' }),
 }
 
 // ===== Notes =====
 export const notes = {
-  list: (paperId: string, page?: number) =>
-    request<{ items: Note[] }>(`/notes/${paperId}${page != null ? `?page=${page}` : ''}`),
-  create: (data: { paper_id: string; page_number: number; paragraph_index?: number; content: string; cited_text?: string; color?: string }) =>
+  list: (paperId: string, page?: number, engine?: string) => {
+    const params: string[] = []
+    if (page != null) params.push(`page=${page}`)
+    if (engine) params.push(`engine=${encodeURIComponent(engine)}`)
+    return request<{ items: Note[] }>(`/notes/${paperId}${params.length ? '?' + params.join('&') : ''}`)
+  },
+  create: (data: { paper_id: string; page_number: number; paragraph_index?: number; content: string; cited_text?: string; color?: string; engine?: string }) =>
     request<{ id: string; created_at: string }>('/notes', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -273,6 +291,11 @@ export const models = {
       method: 'PUT',
       body: JSON.stringify({ type }),
     }),
+  reorder: (modelIds: string[]) =>
+    request<{ status: string }>('/models/reorder', {
+      method: 'PUT',
+      body: JSON.stringify({ model_ids: modelIds }),
+    }),
 }
 
 // ===== Settings =====
@@ -297,4 +320,55 @@ export const system = {
     progress: number
     logs: Array<{ message: string; percent: number } | string>
   }>(`/system/engines/${engineName}/install/status`),
+  dataInfo: () => request<{
+    data_dir: string
+    db_size: number
+    parse_cache_size: number
+    papers_size: number
+    paper_count: number
+    pages_count: number
+    translations_count: number
+  }>('/system/data-info'),
+  clearCache: (type: 'parse' | 'translations' | 'all') =>
+    request<{ status: string; cleared: Record<string, boolean> }>(`/system/clear-cache?type=${type}`, { method: 'POST' }),
+}
+
+// ===== Highlights =====
+export const highlights = {
+  list: (paperId: string, page?: number, engine?: string) => {
+    const params: string[] = []
+    if (page != null) params.push(`page=${page}`)
+    if (engine) params.push(`engine=${encodeURIComponent(engine)}`)
+    return request<{ items: Highlight[] }>(`/highlights/${paperId}${params.length ? '?' + params.join('&') : ''}`)
+  },
+  create: (data: { paper_id: string; page_number: number; paragraph_index?: number; start_offset?: number; end_offset?: number; text: string; color?: string; note?: string; engine?: string }) =>
+    request<{ id: string; created_at: string }>('/highlights', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  update: (highlightId: string, data: { color?: string; note?: string }) =>
+    request<{ status: string }>(`/highlights/${highlightId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+  delete: (highlightId: string) =>
+    request<{ status: string }>(`/highlights/${highlightId}`, { method: 'DELETE' }),
+}
+
+// ===== Bookmarks =====
+export const bookmarks = {
+  list: (paperId: string) =>
+    request<{ items: Bookmark[] }>(`/bookmarks/${paperId}`),
+  create: (data: { paper_id: string; page_number: number; title?: string; note?: string }) =>
+    request<{ id: string; created_at: string }>('/bookmarks', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  update: (bookmarkId: string, data: { title?: string; note?: string }) =>
+    request<{ status: string }>(`/bookmarks/${bookmarkId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+  delete: (bookmarkId: string) =>
+    request<{ status: string }>(`/bookmarks/${bookmarkId}`, { method: 'DELETE' }),
 }

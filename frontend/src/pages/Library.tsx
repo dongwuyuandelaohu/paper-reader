@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Search, Upload, Link2, LayoutGrid, List, Heart, Tag, Trash2,
@@ -17,20 +17,53 @@ import type { Paper } from '@/api/types'
 
 type SortTab = 'created_at' | 'last_read_at' | 'title'
 
+/* ─────────── Skeleton Card (loading placeholder) ─────────── */
+function SkeletonCard() {
+  return (
+    <div style={{
+      background: 'var(--surface)',
+      borderRadius: '10px',
+      border: '1px solid var(--border)',
+      overflow: 'hidden',
+    }}>
+      <div style={{
+        height: '120px',
+        background: 'var(--sand)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px',
+        padding: '20px',
+        justifyContent: 'center',
+      }}>
+        <div style={{ height: '8px', background: 'var(--border2)', borderRadius: '4px', width: '80%', animation: 'pulse 1.5s ease-in-out infinite' }} />
+        <div style={{ height: '8px', background: 'var(--border2)', borderRadius: '4px', width: '95%', animation: 'pulse 1.5s ease-in-out infinite' }} />
+        <div style={{ height: '8px', background: 'var(--border2)', borderRadius: '4px', width: '70%', animation: 'pulse 1.5s ease-in-out infinite' }} />
+        <div style={{ height: '8px', background: 'var(--border2)', borderRadius: '4px', width: '85%', animation: 'pulse 1.5s ease-in-out infinite' }} />
+      </div>
+      <div style={{ padding: '14px' }}>
+        <div style={{ height: '14px', background: 'var(--border2)', borderRadius: '4px', width: '90%', marginBottom: '8px', animation: 'pulse 1.5s ease-in-out infinite' }} />
+        <div style={{ height: '12px', background: 'var(--border)', borderRadius: '4px', width: '60%', marginBottom: '10px', animation: 'pulse 1.5s ease-in-out infinite' }} />
+        <div style={{ height: '3px', background: 'var(--border)', borderRadius: '2px', width: '100%', animation: 'pulse 1.5s ease-in-out infinite' }} />
+      </div>
+    </div>
+  )
+}
+
 export default function Library() {
   const navigate = useNavigate()
   const showToast = useToastStore((s) => s.showToast)
 
   const {
-    papers, total, loading, filter, sort, order, tagId, viewMode, selectedIds,
-    fetchPapers, setFilter, setSort, setOrder, setSearch, setViewMode,
-    toggleSelect, clearSelection, toggleFavorite, deletePaper,
+    papers, total, loading, loadingMore, hasMore, filter, sort, order, tagId, viewMode, selectedIds,
+    fetchPapers, fetchMore, setFilter, setSort, setOrder, setSearch, setViewMode,
+    toggleSelect, clearSelection, toggleFavorite, deletePaper, uploadPaperFromUrl,
   } = usePaperStore()
 
   const { tags, fetchTags, createTag, assignToPaper } = useTagStore()
 
   const [searchInput, setSearchInput] = useState('')
   const [showUploadModal, setShowUploadModal] = useState(false)
+  const [uploadInitialTab, setUploadInitialTab] = useState<'local' | 'url'>('local')
   const [showTagCreateModal, setShowTagCreateModal] = useState(false)
   const [contextMenu, setContextMenu] = useState<{
     open: boolean; x: number; y: number; paperId: string | null
@@ -38,11 +71,30 @@ export default function Library() {
   const [tagAssignTarget, setTagAssignTarget] = useState<string | null>(null)
 
   const searchRef = useRef<HTMLInputElement>(null)
+  const sentinelRef = useRef<HTMLDivElement>(null)
 
   // Fetch papers when filter/sort/order/tagId changes (also covers mount)
   useEffect(() => {
     fetchPapers()
   }, [fetchPapers, filter, sort, order, tagId])
+
+  // Infinite scroll: observe sentinel to load more
+  const handleLoadMore = useCallback(() => {
+    fetchMore()
+  }, [fetchMore])
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) handleLoadMore()
+      },
+      { rootMargin: '300px' }
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [handleLoadMore, papers.length])
 
   // Fetch tags on mount
   useEffect(() => {
@@ -87,6 +139,17 @@ export default function Library() {
     await papersApi.upload(file)
     await fetchPapers()
     showToast('论文上传成功')
+  }
+
+  const handleUploadUrl = async (url: string, title?: string) => {
+    await uploadPaperFromUrl(url, title)
+    showToast('论文下载成功')
+  }
+
+  // Open upload modal with specific tab
+  const openUploadModal = (tab: 'local' | 'url' = 'local') => {
+    setUploadInitialTab(tab)
+    setShowUploadModal(true)
   }
 
   // Right-click context menu
@@ -281,7 +344,7 @@ export default function Library() {
 
           {/* URL import (ghost button) */}
           <button
-            onClick={() => setShowUploadModal(true)}
+            onClick={() => openUploadModal('url')}
             style={{
               padding: '10px 16px',
               background: 'transparent',
@@ -530,15 +593,13 @@ export default function Library() {
         {/* ===== Paper area ===== */}
         <div style={{ flex: 1, overflow: 'auto', padding: '0 28px 28px' }}>
           {loading ? (
+            /* ===== Skeleton loading ===== */
             <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              height: '100%',
-              color: 'var(--stone)',
-              fontSize: '14px',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+              gap: '16px',
             }}>
-              加载中...
+              {Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)}
             </div>
           ) : papers.length === 0 ? (
             /* ===== Empty state ===== */
@@ -611,7 +672,7 @@ export default function Library() {
                     上传论文
                   </button>
                   <button
-                    onClick={() => setShowUploadModal(true)}
+                    onClick={() => openUploadModal('url')}
                     style={{
                       padding: '10px 20px',
                       background: 'transparent',
@@ -660,6 +721,7 @@ export default function Library() {
                   onToggleFavorite={() => toggleFavorite(paper.id)}
                 />
               ))}
+              {loadingMore && Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={`more-${i}`} />)}
             </div>
           ) : (
             /* ===== List view ===== */
@@ -852,6 +914,16 @@ export default function Library() {
               })}
             </div>
           )}
+
+          {/* Infinite scroll sentinel */}
+          {!loading && papers.length > 0 && hasMore && (
+            <div ref={sentinelRef} style={{ height: '1px', margin: '16px 0' }} />
+          )}
+          {!loading && !hasMore && papers.length > 0 && (
+            <div style={{ textAlign: 'center', padding: '16px', color: 'var(--stone)', fontSize: '12px' }}>
+              已加载全部 {total} 篇论文
+            </div>
+          )}
         </div>
       </main>
 
@@ -860,6 +932,8 @@ export default function Library() {
         open={showUploadModal}
         onClose={() => setShowUploadModal(false)}
         onUpload={handleUpload}
+        onUploadUrl={handleUploadUrl}
+        initialTab={uploadInitialTab}
       />
 
       <ContextMenu
@@ -894,7 +968,7 @@ export default function Library() {
         >
           <div
             style={{
-              background: 'var(--white)',
+              background: 'var(--surface)',
               borderRadius: '16px',
               width: '360px',
               maxHeight: '90vh',

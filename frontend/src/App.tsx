@@ -6,19 +6,53 @@ import Settings from './pages/Settings'
 import Models from './pages/Models'
 import { Toast } from './components/Toast'
 import { waitForBackend } from './api/client'
+import { useSettingsStore } from './stores/useSettingsStore'
 
 function App() {
   const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading')
+  const { settings, fetchSettings } = useSettingsStore()
 
   useEffect(() => {
     const isDev = import.meta.env.DEV
     if (isDev) {
       setState('ready')
+      fetchSettings().catch(() => {})
       return
     }
 
-    waitForBackend().then(ok => setState(ok ? 'ready' : 'failed'))
+    waitForBackend().then(ok => {
+      if (ok) {
+        setState('ready')
+        fetchSettings().catch(() => {})
+      } else {
+        setState('failed')
+      }
+    })
   }, [])
+
+  // Apply theme to document body
+  useEffect(() => {
+    if (!settings) return
+
+    const applyTheme = (theme: string) => {
+      const isDark = theme === 'dark' || (theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+      if (isDark) {
+        document.body.classList.add('theme-dark')
+      } else {
+        document.body.classList.remove('theme-dark')
+      }
+    }
+
+    applyTheme(settings.theme)
+
+    // Listen for system theme changes when in auto mode
+    if (settings.theme === 'auto') {
+      const mq = window.matchMedia('(prefers-color-scheme: dark)')
+      const handler = () => applyTheme('auto')
+      mq.addEventListener('change', handler)
+      return () => mq.removeEventListener('change', handler)
+    }
+  }, [settings])
 
   const handleRetry = () => {
     setState('loading')

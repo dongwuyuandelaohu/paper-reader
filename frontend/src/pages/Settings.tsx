@@ -4,7 +4,7 @@ import { useSettingsStore } from '../stores/useSettingsStore'
 import { useToastStore } from '../components/Toast'
 import { system } from '../api/client'
 import type { Engine } from '../api/types'
-import { Cpu, Globe, BookOpen, MessageSquare, Info, ChevronDown, ChevronRight, RotateCcw, Save, Download, CheckCircle2, AlertCircle, Loader2, ExternalLink, Folder } from 'lucide-react'
+import { Cpu, Globe, BookOpen, MessageSquare, Info, ChevronDown, ChevronRight, RotateCcw, Save, Download, CheckCircle2, AlertCircle, Loader2, ExternalLink, Folder, Trash2 } from 'lucide-react'
 
 // ─── Sub-components ──────────────────────────────────────────
 
@@ -28,7 +28,7 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
         width: 18,
         height: 18,
         borderRadius: '50%',
-        background: '#fff',
+        background: 'var(--surface)',
         position: 'absolute',
         top: 3,
         left: checked ? 23 : 3,
@@ -85,7 +85,7 @@ function SelectInput({ value, onChange, options }: {
           padding: '8px 36px 8px 14px',
           border: '1px solid var(--border2)',
           borderRadius: 8,
-          background: 'var(--white)',
+          background: 'var(--surface)',
           color: 'var(--fg)',
           fontSize: 13,
           fontFamily: 'var(--font-sans)',
@@ -142,7 +142,7 @@ type InstallState = {
   status: 'idle' | 'starting' | 'downloading' | 'completed' | 'failed'
   progress: number
   message: string
-  logs: string[]
+  logs: Array<string | { message: string; percent: number }>
   showManual: boolean
 }
 
@@ -236,7 +236,7 @@ function EngineCard({ engine, isDefault, onSetDefault, onInstallComplete }: {
             <button onClick={onSetDefault} style={{
               padding: '6px 14px', fontSize: 12, fontWeight: 500,
               border: '1px solid var(--border2)', borderRadius: 8,
-              background: 'var(--white)', color: 'var(--fg2)', cursor: 'pointer',
+              background: 'var(--surface)', color: 'var(--fg2)', cursor: 'pointer',
             }}>设为默认</button>
           )}
         </div>
@@ -291,7 +291,7 @@ function EngineCard({ engine, isDefault, onSetDefault, onInstallComplete }: {
           <button onClick={onSetDefault} style={{
             padding: '6px 14px', fontSize: 12, fontWeight: 500,
             border: '1px solid var(--border2)', borderRadius: 8,
-            background: 'var(--white)', color: 'var(--fg2)', cursor: 'pointer',
+            background: 'var(--surface)', color: 'var(--fg2)', cursor: 'pointer',
           }}>设为默认</button>
         )}
       </div>
@@ -423,29 +423,57 @@ function EngineCard({ engine, isDefault, onSetDefault, onInstallComplete }: {
 // ─── Main Page ───────────────────────────────────────────────
 
 export default function Settings() {
-  const { settings, engines, loading, fetchSettings, updateSettings, resetSettings, fetchEngines } = useSettingsStore()
+  const { settings, engines, models, loading, fetchSettings, updateSettings, resetSettings, fetchEngines, fetchModels } = useSettingsStore()
   const showToast = useToastStore((s) => s.showToast)
 
   // Local state mirrors
   const [parseEngine, setParseEngine] = useState('')
   const [targetLanguage, setTargetLanguage] = useState('zh')
   const [translateStyle, setTranslateStyle] = useState('academic')
+  const [autoTranslate, setAutoTranslate] = useState(true)
   const [preloadNextPage, setPreloadNextPage] = useState(false)
+  const [enableThinking, setEnableThinking] = useState(false)
+  const [glossaryModelId, setGlossaryModelId] = useState<string>('')
   const [fontSize, setFontSize] = useState(16)
   const [lineHeight, setLineHeight] = useState(1.75)
   const [pdfDisplayMode, setPdfDisplayMode] = useState('mixed')
   const [syncScroll, setSyncScroll] = useState(true)
-  const [darkTheme, setDarkTheme] = useState(false)
+  const [theme, setTheme] = useState('dark')
   const [qaTemperature, setQaTemperature] = useState(0.3)
   const [qaMaxTokens, setQaMaxTokens] = useState('4096')
   const [saving, setSaving] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
+  const [dataInfo, setDataInfo] = useState<{ data_dir: string; db_size: number; parse_cache_size: number; papers_size: number; paper_count: number; pages_count: number; translations_count: number } | null>(null)
+  const [clearing, setClearing] = useState<string | null>(null)
 
   // Initial load
   useEffect(() => {
     fetchSettings()
     fetchEngines()
+    fetchModels()
+    system.dataInfo().then(setDataInfo).catch(() => {})
   }, [])
+
+  const formatSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
+
+  const handleClearCache = async (type: 'parse' | 'translations' | 'all') => {
+    if (!confirm(type === 'all' ? '确认清理所有缓存？这将删除所有解析和翻译结果，需要重新解析。' : `确认清理${type === 'parse' ? '解析' : '翻译'}缓存？`)) return
+    setClearing(type)
+    try {
+      await system.clearCache(type)
+      showToast('缓存已清理')
+      const info = await system.dataInfo()
+      setDataInfo(info)
+    } catch (err: any) {
+      showToast('清理失败: ' + (err.message || '未知错误'))
+    } finally {
+      setClearing(null)
+    }
+  }
 
   // Sync from store to local state when settings load
   useEffect(() => {
@@ -453,12 +481,15 @@ export default function Settings() {
       setParseEngine(settings.parse_engine || '')
       setTargetLanguage(settings.target_language || 'zh')
       setTranslateStyle(settings.translate_style || 'academic')
+      setAutoTranslate(settings.auto_translate ?? true)
       setPreloadNextPage(settings.preload_next_page ?? false)
+      setEnableThinking(settings.enable_thinking ?? false)
+      setGlossaryModelId(settings.glossary_model_id ?? '')
       setFontSize(settings.font_size ?? 16)
       setLineHeight(settings.line_height ?? 1.75)
       setPdfDisplayMode(settings.pdf_display_mode || 'mixed')
       setSyncScroll(settings.sync_scroll ?? true)
-      setDarkTheme(settings.theme === 'dark')
+      setTheme(settings.theme || 'dark')
       setQaTemperature(settings.qa_temperature ?? 0.3)
       setQaMaxTokens(String(settings.qa_max_tokens ?? 4096))
     }
@@ -471,16 +502,19 @@ export default function Settings() {
       parseEngine !== (settings.parse_engine || '') ||
       targetLanguage !== (settings.target_language || 'zh') ||
       translateStyle !== (settings.translate_style || 'academic') ||
+      autoTranslate !== (settings.auto_translate ?? true) ||
       preloadNextPage !== (settings.preload_next_page ?? false) ||
+      enableThinking !== (settings.enable_thinking ?? false) ||
+      glossaryModelId !== (settings.glossary_model_id ?? '') ||
       fontSize !== (settings.font_size ?? 16) ||
       lineHeight !== (settings.line_height ?? 1.75) ||
       pdfDisplayMode !== (settings.pdf_display_mode || 'mixed') ||
       syncScroll !== (settings.sync_scroll ?? true) ||
-      darkTheme !== (settings.theme === 'dark') ||
+      theme !== (settings.theme || 'dark') ||
       qaTemperature !== (settings.qa_temperature ?? 0.3) ||
       String(qaMaxTokens) !== String(settings.qa_max_tokens ?? 4096)
     setHasChanges(changed)
-  }, [settings, parseEngine, targetLanguage, translateStyle, preloadNextPage, fontSize, lineHeight, pdfDisplayMode, syncScroll, darkTheme, qaTemperature, qaMaxTokens])
+  }, [settings, parseEngine, targetLanguage, translateStyle, autoTranslate, preloadNextPage, enableThinking, glossaryModelId, fontSize, lineHeight, pdfDisplayMode, syncScroll, theme, qaTemperature, qaMaxTokens])
 
   const handleSetDefaultEngine = async (engineName: string) => {
     setParseEngine(engineName)
@@ -508,12 +542,15 @@ export default function Settings() {
         parse_engine: parseEngine,
         target_language: targetLanguage,
         translate_style: translateStyle,
+        auto_translate: autoTranslate,
         preload_next_page: preloadNextPage,
+        enable_thinking: enableThinking,
+        glossary_model_id: glossaryModelId || null,
         font_size: fontSize,
         line_height: lineHeight,
         pdf_display_mode: pdfDisplayMode,
         sync_scroll: syncScroll,
-        theme: darkTheme ? 'dark' : 'light',
+        theme: theme,
         qa_temperature: qaTemperature,
         qa_max_tokens: Number(qaMaxTokens),
       })
@@ -530,12 +567,15 @@ export default function Settings() {
       setParseEngine(settings.parse_engine || '')
       setTargetLanguage(settings.target_language || 'zh')
       setTranslateStyle(settings.translate_style || 'academic')
+      setAutoTranslate(settings.auto_translate ?? true)
       setPreloadNextPage(settings.preload_next_page ?? false)
+      setEnableThinking(settings.enable_thinking ?? false)
+      setGlossaryModelId(settings.glossary_model_id ?? '')
       setFontSize(settings.font_size ?? 16)
       setLineHeight(settings.line_height ?? 1.75)
       setPdfDisplayMode(settings.pdf_display_mode || 'mixed')
       setSyncScroll(settings.sync_scroll ?? true)
-      setDarkTheme(settings.theme === 'dark')
+      setTheme(settings.theme || 'dark')
       setQaTemperature(settings.qa_temperature ?? 0.3)
       setQaMaxTokens(String(settings.qa_max_tokens ?? 4096))
     }
@@ -611,7 +651,7 @@ export default function Settings() {
                   style={{
                     padding: '4px 12px', fontSize: 12, fontWeight: 500,
                     border: '1px solid var(--border2)', borderRadius: 6,
-                    background: 'var(--white)', color: 'var(--fg2)', cursor: 'pointer',
+                    background: 'var(--surface)', color: 'var(--fg2)', cursor: 'pointer',
                     display: 'flex', alignItems: 'center', gap: 4,
                   }}
                 >
@@ -682,6 +722,31 @@ export default function Settings() {
               <SettingRow label="预加载下一页">
                 <Toggle checked={preloadNextPage} onChange={setPreloadNextPage} />
               </SettingRow>
+
+              <SettingRow label="自动翻译当前页">
+                <Toggle checked={autoTranslate} onChange={setAutoTranslate} />
+              </SettingRow>
+
+              <SettingRow label="AI 思考模式">
+                <Toggle checked={enableThinking} onChange={setEnableThinking} />
+              </SettingRow>
+              <div style={{ fontSize: 11, color: 'var(--silver)', marginTop: -8, marginBottom: 12, lineHeight: 1.5 }}>
+                关闭后翻译/问答不使用深度思考，首 token 更快（推荐关闭）。部分模型（如 Qwen）支持此选项。
+              </div>
+
+              <SettingRow label="术语查询模型">
+                <SelectInput
+                  value={glossaryModelId}
+                  onChange={setGlossaryModelId}
+                  options={[
+                    { value: '', label: '跟随默认问答模型' },
+                    ...models.map((m: any) => ({ value: m.id, label: m.name })),
+                  ]}
+                />
+              </SettingRow>
+              <div style={{ fontSize: 11, color: 'var(--silver)', marginTop: -8, marginBottom: 12, lineHeight: 1.5 }}>
+                为术语查询指定独立模型（可选用更快的小模型），不指定则使用默认问答模型。
+              </div>
             </section>
 
             <SectionDivider />
@@ -721,8 +786,16 @@ export default function Settings() {
                 <Toggle checked={syncScroll} onChange={setSyncScroll} />
               </SettingRow>
 
-              <SettingRow label="深色主题">
-                <Toggle checked={darkTheme} onChange={setDarkTheme} />
+              <SettingRow label="主题">
+                <SelectInput
+                  value={theme}
+                  onChange={setTheme}
+                  options={[
+                    { value: 'light', label: '浅色' },
+                    { value: 'dark', label: '深色' },
+                    { value: 'auto', label: '跟随系统' },
+                  ]}
+                />
               </SettingRow>
             </section>
 
@@ -753,6 +826,87 @@ export default function Settings() {
                   ]}
                 />
               </SettingRow>
+            </section>
+
+            <SectionDivider />
+
+            {/* ── Section: 数据管理 ── */}
+            <section>
+              <SectionTitle icon={<Folder size={18} />} title="数据管理" />
+              <SectionDesc>查看数据占用和清理缓存。</SectionDesc>
+
+              {dataInfo && (
+                <>
+                  {/* Data directory */}
+                  <SettingRow label="数据目录">
+                    <div style={{ fontSize: 12, color: 'var(--silver)', fontFamily: 'var(--font-mono)', maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={dataInfo.data_dir}>
+                      {dataInfo.data_dir}
+                    </div>
+                  </SettingRow>
+
+                  {/* Storage breakdown */}
+                  <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: 120, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px' }}>
+                      <div style={{ fontSize: 11, color: 'var(--silver)', marginBottom: 4 }}>论文文件</div>
+                      <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--fg)' }}>{formatSize(dataInfo.papers_size)}</div>
+                      <div style={{ fontSize: 11, color: 'var(--stone)', marginTop: 2 }}>{dataInfo.paper_count} 篇</div>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 120, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px' }}>
+                      <div style={{ fontSize: 11, color: 'var(--silver)', marginBottom: 4 }}>解析缓存</div>
+                      <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--fg)' }}>{formatSize(dataInfo.parse_cache_size)}</div>
+                      <div style={{ fontSize: 11, color: 'var(--stone)', marginTop: 2 }}>{dataInfo.pages_count} 页</div>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 120, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px' }}>
+                      <div style={{ fontSize: 11, color: 'var(--silver)', marginBottom: 4 }}>数据库</div>
+                      <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--fg)' }}>{formatSize(dataInfo.db_size)}</div>
+                      <div style={{ fontSize: 11, color: 'var(--stone)', marginTop: 2 }}>{dataInfo.translations_count} 条翻译</div>
+                    </div>
+                  </div>
+
+                  {/* Clear cache buttons */}
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    <button
+                      onClick={() => handleClearCache('parse')}
+                      disabled={clearing !== null}
+                      style={{
+                        padding: '8px 16px', fontSize: 13, fontWeight: 500, borderRadius: 8,
+                        border: '1px solid var(--border2)', background: 'var(--surface)', color: 'var(--fg2)',
+                        cursor: clearing ? 'not-allowed' : 'pointer', opacity: clearing ? 0.5 : 1,
+                        display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.2s',
+                      }}
+                    >
+                      {clearing === 'parse' ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <RotateCcw size={14} />}
+                      清理解析缓存
+                    </button>
+                    <button
+                      onClick={() => handleClearCache('translations')}
+                      disabled={clearing !== null}
+                      style={{
+                        padding: '8px 16px', fontSize: 13, fontWeight: 500, borderRadius: 8,
+                        border: '1px solid var(--border2)', background: 'var(--surface)', color: 'var(--fg2)',
+                        cursor: clearing ? 'not-allowed' : 'pointer', opacity: clearing ? 0.5 : 1,
+                        display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.2s',
+                      }}
+                    >
+                      {clearing === 'translations' ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <RotateCcw size={14} />}
+                      清理翻译缓存
+                    </button>
+                    <button
+                      onClick={() => handleClearCache('all')}
+                      disabled={clearing !== null}
+                      style={{
+                        padding: '8px 16px', fontSize: 13, fontWeight: 500, borderRadius: 8,
+                        border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.05)', color: 'var(--error)',
+                        cursor: clearing ? 'not-allowed' : 'pointer', opacity: clearing ? 0.5 : 1,
+                        display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.2s',
+                      }}
+                    >
+                      {clearing === 'all' ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Trash2 size={14} />}
+                      清理全部缓存
+                    </button>
+                  </div>
+                </>
+              )}
             </section>
 
             <SectionDivider />
@@ -807,7 +961,7 @@ export default function Settings() {
                     fontWeight: 500,
                     border: '1px solid var(--border2)',
                     borderRadius: 8,
-                    background: 'var(--white)',
+                    background: 'var(--surface)',
                     color: 'var(--fg2)',
                     cursor: 'pointer',
                     transition: 'background 0.15s',
@@ -824,7 +978,7 @@ export default function Settings() {
                     fontWeight: 500,
                     border: '1px solid var(--error-bg)',
                     borderRadius: 8,
-                    background: 'var(--white)',
+                    background: 'var(--surface)',
                     color: 'var(--error)',
                     cursor: 'pointer',
                     display: 'flex',

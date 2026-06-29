@@ -18,7 +18,7 @@ from typing import Optional
 
 from services.db import Database
 from services.dependencies import get_db
-from services.ai import AIService, get_ai_service, TRANSLATE_SYSTEM_PROMPT
+from services.ai import AIService, get_ai_service
 
 logger = logging.getLogger("paperlens.translate")
 
@@ -29,10 +29,62 @@ _active_translations: Dict[str, asyncio.Task] = {}
 _translation_clients: Dict[str, Set[asyncio.Queue]] = {}
 
 
+# 目标语言代码 -> 语言名称映射
+_LANGUAGE_NAMES = {
+    "zh": "中文",
+    "ja": "日语",
+    "ko": "韩语",
+    "fr": "法语",
+    "de": "德语",
+    "es": "西班牙语",
+    "en": "English",
+}
+
+# 翻译风格 -> 风格说明
+_STYLE_DESCRIPTIONS = {
+    "academic": "保持学术性和专业性，使用规范的学术用语",
+    "plain": "通俗易懂，适合非专业读者，避免生僻术语",
+    "literal": "忠实直译，尽量逐句对应，不意译",
+}
+
+
+async def _get_translate_settings(db: Database) -> tuple[str, str]:
+    """从设置表读取翻译目标语言和风格，带默认值回退"""
+    target_language = "zh"
+    translate_style = "academic"
+    try:
+        row = await db.fetch_one("SELECT value FROM settings WHERE key = ?", ("target_language",))
+        if row and row["value"]:
+            target_language = json.loads(row["value"])
+        row = await db.fetch_one("SELECT value FROM settings WHERE key = ?", ("translate_style",))
+        if row and row["value"]:
+            translate_style = json.loads(row["value"])
+    except Exception:
+        pass
+    return target_language, translate_style
+
+
+def _build_translate_prompt(target_language: str, style: str) -> str:
+    """根据目标语言和翻译风格构建系统提示词"""
+    lang_name = _LANGUAGE_NAMES.get(target_language, "中文")
+    style_desc = _STYLE_DESCRIPTIONS.get(style, _STYLE_DESCRIPTIONS["academic"])
+    return f"""你是一个专业的学术论文翻译专家。请将以下英文学术论文内容翻译成{lang_name}。
+
+翻译要求：
+1. {style_desc}
+2. 保留专业术语的英文原文（在括号中标注），如：注意力机制（Attention Mechanism）
+3. 保持原文的段落结构和逻辑关系
+4. 数学公式使用 LaTeX 格式保留
+5. 图表标题和引用文献保持原文
+6. 翻译结果使用 Markdown 格式"""
+
+
 class TranslatePageRequest(BaseModel):
     model_id: Optional[str] = None
     engine: Optional[str] = None  # 解析引擎，用于关联翻译缓存
     force: Optional[bool] = False
+    language: Optional[str] = None  # 目标语言（覆盖设置）
+    style: Optional[str] = None  # 翻译风格（覆盖设置）
 
 
 async def _do_translate_and_save(
@@ -42,7 +94,9 @@ async def _do_translate_and_save(
     engine: str,
     model: dict,
     markdown: str,
-    force: bool = False
+    force: bool = False,
+    target_language: str = "zh",
+    style: str = "academic",
 ):
     """
     执行翻译并保存到数据库（后台任务）
@@ -51,14 +105,15 @@ async def _do_translate_and_save(
     task_key = f"{paper_id}:{page_number}:{engine}"
     
     try:
-        ai_service = await get_ai_service(model)
+        ai_service = await get_ai_service(model, db, thinking_override=False)
         
         full_content = ""
         tokens_input = 0
         tokens_output = 0
         
+        system_prompt = _build_translate_prompt(target_language, style)
         messages = [
-            {"role": "system", "content": TRANSLATE_SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": markdown},
         ]
         
@@ -85,7 +140,7 @@ async def _do_translate_and_save(
         existing_translation = await db.fetch_one(
             """SELECT id FROM translations
                WHERE paper_id = ? AND page_number = ? AND engine = ? AND target_language = ?""",
-            (paper_id, page_number, engine, "zh")
+            (paper_id, page_number, engine, target_language)
         )
         
         if existing_translation:
@@ -106,7 +161,7 @@ async def _do_translate_and_save(
                 "paper_id": paper_id,
                 "page_number": page_number,
                 "engine": engine,
-                "target_language": "zh",
+                "target_language": target_language,
                 "content": full_content,
                 "model_id": model["id"],
                 "model_name": model["name"],
@@ -167,6 +222,11 @@ async def translate_page(
     # 确定使用的解析引擎
     engine = data.engine or paper.get("parse_engine", "pymupdf")
     
+    # 读取翻译目标语言和风格（请求参数优先，否则用设置）
+    settings_lang, settings_style = await _get_translate_settings(db)
+    target_language = data.language or settings_lang
+    style = data.style or settings_style
+    
     page = await db.fetch_one(
         "SELECT * FROM paper_pages WHERE paper_id = ? AND page_number = ? AND engine = ?",
         (paper_id, page_number, engine)
@@ -180,7 +240,7 @@ async def translate_page(
         existing = await db.fetch_one(
             """SELECT * FROM translations
                WHERE paper_id = ? AND page_number = ? AND engine = ? AND target_language = ?""",
-            (paper_id, page_number, engine, "zh")
+            (paper_id, page_number, engine, target_language)
         )
         
         if existing:
@@ -222,7 +282,7 @@ async def translate_page(
         # 启动新的后台翻译任务
         logger.info(f"[Translate] Starting new translation for {task_key}")
         task = asyncio.create_task(
-            _do_translate_and_save(db, paper_id, page_number, engine, model, page["markdown"], data.force)
+            _do_translate_and_save(db, paper_id, page_number, engine, model, page["markdown"], data.force, target_language, style)
         )
         _active_translations[task_key] = task
     

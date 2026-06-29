@@ -162,7 +162,9 @@ INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES
     ('pdf_display_mode', '"original"', datetime('now')),
     ('parse_engine', '"marker"', datetime('now')),
     ('parse_service_url', '"http://localhost:8010"', datetime('now')),
-    ('vision_model_id', 'null', datetime('now'));
+    ('vision_model_id', 'null', datetime('now')),
+    ('enable_thinking', 'false', datetime('now')),
+    ('glossary_model_id', 'null', datetime('now'));
 """
 
 
@@ -256,6 +258,9 @@ class Database:
         safe_columns = [
             ("models", "supports_vision", "INTEGER DEFAULT 0"),
             ("messages", "images", "TEXT"),
+            ("messages", "thinking", "TEXT"),
+            ("notes", "engine", "TEXT"),
+            ("highlights", "engine", "TEXT"),
         ]
         for table, column, col_type in safe_columns:
             try:

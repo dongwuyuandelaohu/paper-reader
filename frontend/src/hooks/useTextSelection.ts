@@ -80,10 +80,9 @@ export function useTextSelection(
 
     const handleMouseDown = (e: MouseEvent) => {
       const target = e.target as HTMLElement
-      if (target.closest('.selection-popup') || target.closest('.term-popup')) {
-        return
-      }
-      if (target.closest('[data-no-clear]')) {
+      // 点击弹窗内部或 data-no-clear 元素时，阻止默认行为（防止选区折叠导致弹窗消失）
+      if (target.closest('.selection-popup') || target.closest('.term-popup') || target.closest('[data-no-clear]')) {
+        e.preventDefault()
         return
       }
     }

@@ -63,9 +63,22 @@ async def lookup_term(
             found_in_cache=True,
         )
     
-    model = await db.fetch_one(
-        "SELECT * FROM models WHERE is_default_chat IS NOT NULL LIMIT 1"
-    )
+    # 优先使用设置中的术语模型，否则用默认问答模型，再否则取第一个
+    model = None
+    try:
+        settings_row = await db.fetch_one("SELECT value FROM settings WHERE key = ?", ("glossary_model_id",))
+        if settings_row and settings_row["value"]:
+            import json as _json
+            glossary_model_id = _json.loads(settings_row["value"])
+            if glossary_model_id and glossary_model_id != "null":
+                model = await db.get_by_id("models", glossary_model_id)
+    except Exception:
+        pass
+
+    if not model:
+        model = await db.fetch_one(
+            "SELECT * FROM models WHERE is_default_chat IS NOT NULL LIMIT 1"
+        )
     if not model:
         model = await db.fetch_one("SELECT * FROM models LIMIT 1")
     
@@ -80,7 +93,7 @@ async def lookup_term(
         )
     
     try:
-        ai_service = await get_ai_service(model)
+        ai_service = await get_ai_service(model, db, thinking_override=False)
         
         messages = [
             {"role": "system", "content": GLOSSARY_SYSTEM_PROMPT},

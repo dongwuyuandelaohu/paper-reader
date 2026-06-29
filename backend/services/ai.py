@@ -16,13 +16,22 @@ logger = logging.getLogger("paperlens.ai")
 class AIService:
     """AI 服务类，封装 OpenAI 兼容 API"""
     
-    def __init__(self, api_base_url: str, api_key: str, model_id: str):
+    def __init__(self, api_base_url: str, api_key: str, model_id: str, enable_thinking: bool = False):
         self.client = AsyncOpenAI(
             base_url=api_base_url,
             api_key=api_key,
         )
         self.model_id = model_id
-    
+        self.enable_thinking = enable_thinking
+
+    def _extra_body(self) -> dict:
+        """构建 extra_body，当 enable_thinking=False 时显式关闭思考模式"""
+        if not self.enable_thinking:
+            # 兼容 Qwen/阿里 等支持 enable_thinking 参数的供应商
+            # 不支持该参数的供应商会忽略它，不会报错
+            return {"enable_thinking": False}
+        return {}
+
     async def chat(
         self,
         messages: list[dict],
@@ -37,6 +46,7 @@ class AIService:
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens,
+            extra_body=self._extra_body(),
         )
         
         duration_ms = int((time.time() - start_time) * 1000)
@@ -54,15 +64,20 @@ class AIService:
         temperature: float = 0.7,
         max_tokens: int = 4096,
     ) -> AsyncGenerator[dict, None]:
-        """流式对话，返回 SSE 事件生成器"""
+        """流式对话，返回 SSE 事件生成器
+
+        当 enable_thinking=True 时，思考内容通过 type='thinking' 事件单独输出，
+        正式回答通过 type='content' 事件输出。
+        """
         start_time = time.time()
         full_content = ""
+        full_thinking = ""
         tokens_input = 0
         tokens_output = 0
-        
+
         # 记录首包时间用于诊断
         first_token_time = None
-        
+
         try:
             stream = await self.client.chat.completions.create(
                 model=self.model_id,
@@ -70,34 +85,49 @@ class AIService:
                 temperature=temperature,
                 max_tokens=max_tokens,
                 stream=True,
+                extra_body=self._extra_body(),
             )
         except Exception as e:
             raise
-        
+
         async for chunk in stream:
-            if chunk.choices and chunk.choices[0].delta.content:
-                content = chunk.choices[0].delta.content
-                full_content += content
-                if first_token_time is None:
-                    first_token_time = time.time()
-                    logger.info(
-                        f"[Translate] First token received after "
-                        f"{first_token_time - start_time:.2f}s"
-                    )
-                yield {
-                    "type": "content",
-                    "content": content,
-                }
-            
+            if chunk.choices and chunk.choices[0].delta:
+                delta = chunk.choices[0].delta
+
+                # 思考内容（Qwen 等模型在 reasoning_content 字段返回）
+                reasoning = getattr(delta, "reasoning_content", None)
+                if reasoning:
+                    full_thinking += reasoning
+                    yield {
+                        "type": "thinking",
+                        "content": reasoning,
+                    }
+
+                # 正式回答内容
+                if delta.content:
+                    content = delta.content
+                    full_content += content
+                    if first_token_time is None:
+                        first_token_time = time.time()
+                        logger.info(
+                            f"[AI] First content token after "
+                            f"{first_token_time - start_time:.2f}s"
+                        )
+                    yield {
+                        "type": "content",
+                        "content": content,
+                    }
+
             if chunk.usage:
                 tokens_input = chunk.usage.prompt_tokens
                 tokens_output = chunk.usage.completion_tokens
-        
+
         duration_ms = int((time.time() - start_time) * 1000)
-        
+
         yield {
             "type": "done",
             "content": full_content,
+            "thinking": full_thinking,
             "tokens_input": tokens_input,
             "tokens_output": tokens_output,
             "duration_ms": duration_ms,
@@ -111,6 +141,7 @@ class AIService:
                 model=self.model_id,
                 messages=[{"role": "user", "content": "Hi"}],
                 max_tokens=5,
+                extra_body=self._extra_body(),
             )
             duration_ms = int((time.time() - start_time) * 1000)
             
@@ -126,12 +157,35 @@ class AIService:
             }
 
 
-async def get_ai_service(model_row: dict) -> AIService:
-    """从模型记录创建 AI 服务实例"""
+async def get_ai_service(model_row: dict, db=None, thinking_override: bool | None = None) -> AIService:
+    """从模型记录创建 AI 服务实例
+
+    Args:
+        model_row: 模型数据库记录
+        db: 可选数据库实例，用于读取 enable_thinking 设置
+        thinking_override:
+            None  = 从 settings 读取 enable_thinking（QA 问答用）
+            False = 强制关闭思考（翻译/术语用）
+            True  = 强制开启思考
+    """
+    if thinking_override is not None:
+        enable_thinking = thinking_override
+    else:
+        enable_thinking = False
+        if db is not None:
+            try:
+                row = await db.fetch_one("SELECT value FROM settings WHERE key = ?", ("enable_thinking",))
+                if row and row["value"]:
+                    import json as _json
+                    enable_thinking = _json.loads(row["value"])
+            except Exception:
+                pass
+
     return AIService(
         api_base_url=model_row["api_base_url"],
         api_key=model_row["api_key"],
         model_id=model_row["model_id"],
+        enable_thinking=enable_thinking,
     )
 
 

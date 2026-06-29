@@ -4,7 +4,9 @@
 """
 
 import uuid
+import re
 import shutil
+import httpx
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -28,6 +30,10 @@ class PaperResponse(BaseModel):
     authors: Optional[list[str]] = None
     year: Optional[int] = None
     venue: Optional[str] = None
+    abstract: Optional[str] = None
+    doi: Optional[str] = None
+    arxiv_id: Optional[str] = None
+    source_url: Optional[str] = None
     total_pages: int
     pages_parsed: int = 0
     pages_translated: int = 0
@@ -37,6 +43,86 @@ class PaperResponse(BaseModel):
     tags: list[dict] = []
     created_at: str
     last_read_at: Optional[str] = None
+
+
+# ========== 元数据提取 ==========
+
+# 匹配 arxiv ID 的多种格式
+_ARXIV_RE = re.compile(r'(?:arxiv[:\s/])?(\d{4}\.\d{4,5}(?:v\d+)?)', re.IGNORECASE)
+# 匹配 DOI
+_DOI_RE = re.compile(r'10\.\d{4,9}/[^\s"<>]+', re.IGNORECASE)
+
+
+def extract_metadata_from_pdf(file_path: Path, doc=None) -> dict:
+    """从 PDF 元数据中提取标题、作者、年份、DOI、arxiv_id 等。
+
+    返回 dict，仅包含成功提取到的字段（键值可能为 None）。
+    """
+    import fitz
+
+    meta = {}
+    close_doc = False
+    if doc is None:
+        doc = fitz.open(str(file_path))
+        close_doc = True
+
+    try:
+        info = doc.metadata or {}
+
+        # 标题：优先 metadata.title，避免空字符串
+        title = (info.get("title") or "").strip()
+        if title:
+            meta["title"] = title
+
+        # 作者：metadata.author 可能是逗号分隔
+        author_raw = (info.get("author") or "").strip()
+        if author_raw:
+            # 拆分成列表再重新用逗号连接存为字符串（保持 DB 中 authors 为 TEXT）
+            authors_list = [a.strip() for a in re.split(r'[;,]', author_raw) if a.strip()]
+            if authors_list:
+                meta["authors"] = ", ".join(authors_list)
+
+        # 关键词中提取年份
+        keywords = (info.get("keywords") or "") + " " + (info.get("subject") or "")
+        year_match = re.search(r'\b(19|20)\d{2}\b', keywords)
+        if year_match:
+            meta["year"] = int(year_match.group(0))
+
+        # 从首页文本提取 DOI 和 arxiv ID
+        try:
+            first_page_text = doc[0].get_text("text")[:3000] if len(doc) > 0 else ""
+        except Exception:
+            first_page_text = ""
+
+        if first_page_text:
+            doi_match = _DOI_RE.search(first_page_text)
+            if doi_match:
+                meta["doi"] = doi_match.group(0).rstrip(".,;)")
+
+            arxiv_match = _ARXIV_RE.search(first_page_text)
+            if arxiv_match:
+                meta["arxiv_id"] = arxiv_match.group(1)
+
+        # 从首页文本提取摘要（Abstract / ABSTRACT 之后的内容）
+        if first_page_text:
+            abs_match = re.search(
+                r'(?:ABSTRACT|Abstract)\s*[:\n]+\s*(.+?)(?:\n\s*\n|Keywords|1\.?\s+Introduction)',
+                first_page_text,
+                re.DOTALL,
+            )
+            if abs_match:
+                abstract = abs_match.group(1).strip()
+                # 截断过长的摘要
+                if len(abstract) > 2000:
+                    abstract = abstract[:2000] + "..."
+                if len(abstract) > 50:  # 太短的不当作摘要
+                    meta["abstract"] = abstract
+
+    finally:
+        if close_doc:
+            doc.close()
+
+    return meta
 
 
 class PaperListResponse(BaseModel):
@@ -146,6 +232,10 @@ async def list_papers(
             authors=row["authors"].split(",") if row["authors"] else None,
             year=row["year"],
             venue=row["venue"],
+            abstract=row["abstract"] if "abstract" in row.keys() else None,
+            doi=row["doi"] if "doi" in row.keys() else None,
+            arxiv_id=row["arxiv_id"] if "arxiv_id" in row.keys() else None,
+            source_url=row["source_url"] if "source_url" in row.keys() else None,
             total_pages=row["total_pages"],
             pages_parsed=row["pages_parsed"],
             pages_translated=row["pages_translated"],
@@ -186,6 +276,10 @@ async def get_paper(paper_id: str, db: Database = Depends(get_db)):
         authors=row["authors"].split(",") if row["authors"] else None,
         year=row["year"],
         venue=row["venue"],
+        abstract=row["abstract"] if "abstract" in row.keys() else None,
+        doi=row["doi"] if "doi" in row.keys() else None,
+        arxiv_id=row["arxiv_id"] if "arxiv_id" in row.keys() else None,
+        source_url=row["source_url"] if "source_url" in row.keys() else None,
         total_pages=row["total_pages"],
         pages_parsed=row["pages_parsed"],
         pages_translated=row["pages_translated"],
@@ -223,35 +317,165 @@ async def upload_paper(
     # 获取文件信息
     file_size = file_path.stat().st_size
     
-    # 获取页数（使用 PyMuPDF）
-    total_pages = 0
+    # 读取 PDF 并提取页数 + 元数据
+    import fitz
     try:
-        import fitz
         doc = fitz.open(str(file_path))
         total_pages = len(doc)
+        extracted = extract_metadata_from_pdf(file_path, doc=doc)
         doc.close()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"无法读取 PDF: {str(e)}")
     
-    # 创建论文记录
+    # 标题：优先用户传入 title，其次元数据提取，最后文件名
+    final_title = title or extracted.get("title") or file.filename.replace(".pdf", "")
+    
+    # 创建论文记录（合并元数据）
     now = datetime.now().isoformat()
-    await db.insert("papers", {
+    record = {
         "id": paper_id,
-        "title": title or file.filename.replace(".pdf", ""),
+        "title": final_title,
         "file_path": str(file_path),
         "file_size": file_size,
         "total_pages": total_pages,
         "created_at": now,
         "updated_at": now,
-    })
+    }
+    # 合并提取到的元数据（仅覆盖非空字段）
+    for key in ("authors", "year", "venue", "abstract", "doi", "arxiv_id"):
+        if key in extracted and extracted[key]:
+            record[key] = extracted[key]
+    
+    await db.insert("papers", record)
     
     # 不自动触发解析，由用户手动选择引擎
     return {
         "id": paper_id,
-        "title": title or file.filename.replace(".pdf", ""),
+        "title": final_title,
         "total_pages": total_pages,
         "parse_status": "pending",
+        "authors": record.get("authors"),
+        "year": record.get("year"),
+        "doi": record.get("doi"),
+        "arxiv_id": record.get("arxiv_id"),
     }
+
+
+class UploadUrlRequest(BaseModel):
+    url: str
+    title: Optional[str] = None
+
+
+@router.post("/upload-url")
+async def upload_paper_from_url(
+    data: UploadUrlRequest,
+    db: Database = Depends(get_db),
+):
+    """从 URL 下载论文 PDF"""
+    url = data.url.strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="URL 不能为空")
+
+    # 下载 PDF
+    try:
+        async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+            resp = await client.get(url, headers={"User-Agent": "PaperLens/1.0"})
+            if resp.status_code != 200:
+                raise HTTPException(status_code=400, detail=f"下载失败: HTTP {resp.status_code}")
+            content_type = resp.headers.get("content-type", "")
+            if "pdf" not in content_type and not url.lower().endswith(".pdf"):
+                raise HTTPException(status_code=400, detail="URL 不是有效的 PDF 文件")
+            pdf_bytes = resp.content
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=400, detail=f"下载失败: {str(e)}")
+
+    # 生成论文 ID 并保存
+    paper_id = str(uuid.uuid4())
+    papers_dir = get_data_dir() / "papers"
+    papers_dir.mkdir(parents=True, exist_ok=True)
+    file_path = papers_dir / f"{paper_id}.pdf"
+
+    with open(file_path, "wb") as f:
+        f.write(pdf_bytes)
+
+    file_size = file_path.stat().st_size
+
+    # 读取 PDF 并提取页数 + 元数据
+    import fitz
+    try:
+        doc = fitz.open(str(file_path))
+        total_pages = len(doc)
+        extracted = extract_metadata_from_pdf(file_path, doc=doc)
+        doc.close()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"无法读取 PDF: {str(e)}")
+
+    # 从 URL 提取 arxiv_id（如 arxiv 链接）
+    if "arxiv_id" not in extracted:
+        arxiv_match = _ARXIV_RE.search(url)
+        if arxiv_match:
+            extracted["arxiv_id"] = arxiv_match.group(1)
+
+    # 文件名：从 URL 末段或用 ID
+    url_filename = url.rstrip("/").split("/")[-1]
+    fallback_name = url_filename if url_filename.lower().endswith(".pdf") else f"paper_{paper_id[:8]}"
+    final_title = data.title or extracted.get("title") or fallback_name.replace(".pdf", "")
+
+    now = datetime.now().isoformat()
+    record = {
+        "id": paper_id,
+        "title": final_title,
+        "file_path": str(file_path),
+        "file_size": file_size,
+        "total_pages": total_pages,
+        "source_url": url,
+        "created_at": now,
+        "updated_at": now,
+    }
+    for key in ("authors", "year", "venue", "abstract", "doi", "arxiv_id"):
+        if key in extracted and extracted[key]:
+            record[key] = extracted[key]
+
+    await db.insert("papers", record)
+
+    return {
+        "id": paper_id,
+        "title": final_title,
+        "total_pages": total_pages,
+        "parse_status": "pending",
+        "authors": record.get("authors"),
+        "year": record.get("year"),
+        "doi": record.get("doi"),
+        "arxiv_id": record.get("arxiv_id"),
+    }
+
+
+@router.patch("/{paper_id}/metadata")
+async def reextract_metadata(
+    paper_id: str,
+    db: Database = Depends(get_db),
+):
+    """重新从 PDF 文件提取元数据"""
+    paper = await db.get_by_id("papers", paper_id)
+    if not paper:
+        raise HTTPException(status_code=404, detail="论文不存在")
+
+    file_path = Path(paper["file_path"])
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="PDF 文件不存在")
+
+    extracted = extract_metadata_from_pdf(file_path)
+
+    update_data = {}
+    for key in ("title", "authors", "year", "venue", "abstract", "doi", "arxiv_id"):
+        if key in extracted and extracted[key]:
+            update_data[key] = extracted[key]
+
+    if update_data:
+        update_data["updated_at"] = datetime.now().isoformat()
+        await db.update("papers", paper_id, update_data)
+
+    return {"status": "ok", "updated_fields": list(update_data.keys())}
 
 
 @router.patch("/{paper_id}")

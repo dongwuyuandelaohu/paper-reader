@@ -27,7 +27,11 @@ function _reconnectParseSSE(paperId: string, engine: string) {
     try {
       const data = JSON.parse(event.data)
       if (data.type === 'progress') {
-        useReaderStore.setState({ parseProgress: data.progress || 0 })
+        useReaderStore.setState({
+          parseProgress: data.progress || 0,
+          parsePagesDone: data.pages_done || 0,
+          parseTotalPages: data.total_pages || 0,
+        })
       } else if (data.type === 'completed') {
         useReaderStore.setState({ parsing: false, parseProgress: 1, currentEngine: engine })
         await useReaderStore.getState().loadPages(engine)
@@ -86,6 +90,8 @@ interface ReaderStore {
   loading: boolean
   parsing: boolean
   parseProgress: number
+  parsePagesDone: number
+  parseTotalPages: number
   selectedEngine: string
   currentEngine: string | null
 
@@ -112,17 +118,19 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
   currentPage: 1,
   translations: {},
   translatingPages: new Set(),
-  tocOpen: false,
+  tocOpen: (() => { try { return localStorage.getItem('paperlens:tocOpen') === '1' } catch { return false } })(),
   parsePanelOpen: false,
   qaPanelOpen: false,
   parsePanelWidth: 0, // will be set by layout
   qaPanelWidth: 380,
-  zoom: 1,
+  zoom: (() => { try { const v = localStorage.getItem('paperlens:zoom'); return v ? Number(v) : 1 } catch { return 1 } })(),
   parseStatus: null,
   loading: false,
   parsing: false,
   parseProgress: 0,
-  selectedEngine: 'pymupdf',
+  parsePagesDone: 0,
+  parseTotalPages: 0,
+  selectedEngine: (() => { try { return localStorage.getItem('paperlens:selectedEngine') || 'pymupdf' } catch { return 'pymupdf' } })(),
   currentEngine: null,
 
   loadPaper: async (id) => {
@@ -144,6 +152,8 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
           translations: {},
           parseStatus: null,
           parseProgress: 0,
+          parsePagesDone: 0,
+          parseTotalPages: 0,
           parsing: false,
           currentEngine: null,
           currentPage: 1,
@@ -475,11 +485,22 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
     }
   },
 
-  toggleToc: () => set((s) => ({ tocOpen: !s.tocOpen })),
+  toggleToc: () => set((s) => {
+    const next = !s.tocOpen
+    try { localStorage.setItem('paperlens:tocOpen', next ? '1' : '0') } catch { /* ignore */ }
+    return { tocOpen: next }
+  }),
   toggleParsePanel: () => set((s) => ({ parsePanelOpen: !s.parsePanelOpen })),
   toggleQaPanel: () => set((s) => ({ qaPanelOpen: !s.qaPanelOpen })),
   setParsePanelWidth: (w) => set({ parsePanelWidth: w }),
   setQaPanelWidth: (w) => set({ qaPanelWidth: w }),
-  setZoom: (zoom) => set({ zoom: Math.max(0.5, Math.min(3, zoom)) }),
-  setSelectedEngine: (engine) => set({ selectedEngine: engine }),
+  setZoom: (zoom) => {
+    const clamped = Math.max(0.5, Math.min(3, zoom))
+    try { localStorage.setItem('paperlens:zoom', String(clamped)) } catch { /* ignore */ }
+    set({ zoom: clamped })
+  },
+  setSelectedEngine: (engine) => {
+    try { localStorage.setItem('paperlens:selectedEngine', engine) } catch { /* ignore */ }
+    set({ selectedEngine: engine })
+  },
 }))

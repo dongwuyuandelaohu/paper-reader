@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Upload, Link, X, FileText, Loader2 } from 'lucide-react'
 import { Modal } from './Modal'
 
@@ -6,6 +6,8 @@ interface UploadModalProps {
   open: boolean
   onClose: () => void
   onUpload: (file: File) => Promise<void>
+  onUploadUrl?: (url: string, title?: string) => Promise<void>
+  initialTab?: 'local' | 'url'
 }
 
 interface UploadItem {
@@ -15,12 +17,21 @@ interface UploadItem {
   error?: string
 }
 
-export function UploadModal({ open, onClose, onUpload }: UploadModalProps) {
-  const [activeTab, setActiveTab] = useState<'local' | 'url'>('local')
+export function UploadModal({ open, onClose, onUpload, onUploadUrl, initialTab = 'local' }: UploadModalProps) {
+  const [activeTab, setActiveTab] = useState<'local' | 'url'>(initialTab)
   const [uploads, setUploads] = useState<UploadItem[]>([])
   const [url, setUrl] = useState('')
+  const [urlError, setUrlError] = useState('')
   const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Sync tab when opening
+  useEffect(() => {
+    if (open) {
+      setActiveTab(initialTab)
+      setUrlError('')
+    }
+  }, [open, initialTab])
 
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`
@@ -50,6 +61,10 @@ export function UploadModal({ open, onClose, onUpload }: UploadModalProps) {
   }
 
   const handleUpload = async () => {
+    if (activeTab === 'url') {
+      await handleUploadUrl()
+      return
+    }
     if (uploads.length === 0) return
 
     setIsUploading(true)
@@ -78,6 +93,39 @@ export function UploadModal({ open, onClose, onUpload }: UploadModalProps) {
       setUploads([])
       onClose()
     }, 1000)
+  }
+
+  const handleUploadUrl = async () => {
+    if (!url.trim()) {
+      setUrlError('请输入 URL')
+      return
+    }
+    if (!onUploadUrl) {
+      setUrlError('URL 下载不可用')
+      return
+    }
+
+    // 简单校验 URL
+    try {
+      new URL(url.trim())
+    } catch {
+      setUrlError('URL 格式不正确')
+      return
+    }
+
+    setIsUploading(true)
+    setUrlError('')
+    try {
+      await onUploadUrl(url.trim())
+      setUrl('')
+      setTimeout(() => {
+        onClose()
+      }, 500)
+    } catch (error: any) {
+      setUrlError(error?.message || '下载失败，请检查 URL 是否可访问')
+    } finally {
+      setIsUploading(false)
+    }
   }
 
   const handleClose = () => {
@@ -115,20 +163,20 @@ export function UploadModal({ open, onClose, onUpload }: UploadModalProps) {
           </button>
           <button
             onClick={handleUpload}
-            disabled={uploads.length === 0 || isUploading}
+            disabled={(activeTab === 'local' ? uploads.length === 0 : !url.trim()) || isUploading}
             style={{
               padding: '8px 16px',
-              background: uploads.length > 0 && !isUploading ? 'var(--accent)' : 'var(--border2)',
+              background: ((activeTab === 'local' ? uploads.length > 0 : !!url.trim()) && !isUploading) ? 'var(--accent)' : 'var(--border2)',
               color: 'var(--white)',
               border: 'none',
               borderRadius: '8px',
               fontSize: '14px',
               fontWeight: 500,
-              cursor: uploads.length > 0 && !isUploading ? 'pointer' : 'not-allowed',
+              cursor: ((activeTab === 'local' ? uploads.length > 0 : !!url.trim()) && !isUploading) ? 'pointer' : 'not-allowed',
               transition: 'all 0.2s',
             }}
           >
-            {isUploading ? '导入中...' : '开始导入'}
+            {isUploading ? '导入中...' : activeTab === 'url' ? '下载论文' : '开始导入'}
           </button>
         </>
       }
@@ -344,22 +392,36 @@ export function UploadModal({ open, onClose, onUpload }: UploadModalProps) {
             <input
               type="url"
               value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="输入论文 PDF 下载链接"
+              onChange={(e) => { setUrl(e.target.value); setUrlError('') }}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleUpload() }}
+              placeholder="输入论文 PDF 下载链接（如 https://arxiv.org/pdf/...）"
+              disabled={isUploading}
               style={{
                 width: '100%',
                 padding: '10px 12px',
-                border: '1px solid var(--border2)',
+                border: `1px solid ${urlError ? 'var(--error)' : 'var(--border2)'}`,
                 borderRadius: '8px',
                 fontSize: '14px',
                 color: 'var(--fg)',
                 background: 'var(--surface)',
                 outline: 'none',
                 transition: 'border-color 0.2s',
+                fontFamily: 'var(--font-sans)',
               }}
-              onFocus={(e) => e.currentTarget.style.borderColor = 'var(--accent)'}
-              onBlur={(e) => e.currentTarget.style.borderColor = 'var(--border2)'}
+              onFocus={(e) => { if (!urlError) e.currentTarget.style.borderColor = 'var(--accent)' }}
+              onBlur={(e) => { if (!urlError) e.currentTarget.style.borderColor = 'var(--border2)' }}
             />
+            {urlError && (
+              <div style={{ fontSize: '12px', color: 'var(--error)', padding: '0 4px' }}>
+                {urlError}
+              </div>
+            )}
+            {isUploading && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--muted)' }}>
+                <Loader2 size={14} strokeWidth={2} color="var(--accent)" style={{ animation: 'spin 1s linear infinite' }} />
+                正在下载...
+              </div>
+            )}
             <div style={{
               fontSize: '12px',
               color: 'var(--muted)',
@@ -367,8 +429,9 @@ export function UploadModal({ open, onClose, onUpload }: UploadModalProps) {
               background: 'var(--surface)',
               borderRadius: '8px',
               border: '1px solid var(--border)',
+              lineHeight: 1.6,
             }}>
-              提示：请确保链接可以直接下载 PDF 文件
+              提示：请确保链接可以直接下载 PDF 文件。支持 arXiv 等论文直链，下载后会自动提取标题、作者等元数据。
             </div>
           </div>
         )}

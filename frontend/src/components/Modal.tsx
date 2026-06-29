@@ -40,7 +40,7 @@ export function Modal({ open, onClose, title, children, footer }: ModalProps) {
     >
       <div
         style={{
-          background: 'var(--white)',
+          background: 'var(--surface)',
           borderRadius: '16px',
           maxWidth: '540px',
           width: '100%',

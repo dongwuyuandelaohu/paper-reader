@@ -52,7 +52,7 @@ export function ContextMenu({ x, y, open, onClose, items }: ContextMenuProps) {
         position: 'fixed',
         left: `${x}px`,
         top: `${y}px`,
-        background: 'var(--white)',
+        background: 'var(--surface)',
         borderRadius: '10px',
         boxShadow: '0 4px 16px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.04)',
         padding: '6px',

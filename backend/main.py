@@ -38,7 +38,7 @@ from config.paths import get_db_path, get_static_dir, is_frozen
 from services.db import Database
 from services.dependencies import set_db
 from services.engine_detector import detect_engines, save_engines_to_db
-from api import papers, translate, conversations, models, settings, notes, glossary, system, parse, tags
+from api import papers, translate, conversations, models, settings, notes, glossary, system, parse, tags, highlights, bookmarks
 
 
 @asynccontextmanager
@@ -114,6 +114,8 @@ app.include_router(glossary.router, prefix="/api/v1/glossary", tags=["术语"])
 app.include_router(system.router, prefix="/api/v1/system", tags=["系统"])
 app.include_router(parse.router, prefix="/api/v1/parse", tags=["解析"])
 app.include_router(tags.router, prefix="/api/v1/tags", tags=["标签"])
+app.include_router(highlights.router, prefix="/api/v1/highlights", tags=["高亮"])
+app.include_router(bookmarks.router, prefix="/api/v1/bookmarks", tags=["书签"])
 
 
 @app.get("/")

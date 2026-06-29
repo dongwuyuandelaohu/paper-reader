@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useReaderStore } from '@/stores/useReaderStore'
 import { useQAStore } from '@/stores/useQAStore'
@@ -11,7 +12,10 @@ import { EngineModal } from '@/components/EngineModal'
 import { QAPanel } from '@/components/QAPanel'
 import { MarkdownRenderer } from '@/components/MarkdownRenderer'
 import { FullMarkdownModal } from '@/components/FullMarkdownModal'
-import { papers, system } from '@/api/client'
+import { Modal } from '@/components/Modal'
+import { useTextSelection } from '@/hooks/useTextSelection'
+import { useDoubleClick } from '@/hooks/useDoubleClick'
+import { papers, system, highlights as highlightsApi, glossary as glossaryApi, notes as notesApi, bookmarks as bookmarksApi } from '@/api/client'
 import type { ParsedPage } from '@/api/types'
 
 /* ─────────── Inline SVG Icons ─────────── */
@@ -69,6 +73,35 @@ function ToolBtn({
   )
 }
 
+/* ─────────── Highlight rendering ─────────── */
+
+/**
+ * 在 markdown 原文中标记高亮文本（用 <mark> 包裹）。
+ * 只处理非 HTML 标签的文本段，避免破坏 markdown 结构。
+ * 译文不受影响（调用方仅在显示原文时使用）。
+ */
+function applyHighlights(markdown: string, highlights: Array<{ text: string; color: string }>): string {
+  if (!highlights.length) return markdown
+  // 按长度降序，避免短文本替换破坏长文本
+  const sorted = [...highlights].sort((a, b) => b.text.length - a.text.length)
+  // 按 HTML 标签拆分，只处理文本段
+  const segments = markdown.split(/(<[^>]+>)/)
+
+  for (const hl of sorted) {
+    if (!hl.text || hl.text.length < 3) continue
+    if (hl.text.includes('<') || hl.text.includes('>')) continue
+    const markTag = `<mark style="background-color:${hl.color};padding:1px 2px;border-radius:2px;color:inherit;">${hl.text}</mark>`
+    for (let i = 0; i < segments.length; i++) {
+      // 跳过 HTML 标签段
+      if (segments[i].startsWith('<') && segments[i].endsWith('>')) continue
+      if (segments[i].includes(hl.text)) {
+        segments[i] = segments[i].split(hl.text).join(markTag)
+      }
+    }
+  }
+  return segments.join('')
+}
+
 /* ─────────── Parse Page Chunk Component ─────────── */
 
 function ParsePageChunk({
@@ -78,6 +111,7 @@ function ParsePageChunk({
   onTranslate,
   onRetranslate,
   translating,
+  highlights,
 }: {
   page: ParsedPage
   paperId: string
@@ -85,6 +119,7 @@ function ParsePageChunk({
   onTranslate: () => void
   onRetranslate: () => void
   translating: boolean
+  highlights: Array<{ text: string; color: string }>
 }) {
   const [showTranslation, setShowTranslation] = useState(false)
   const prevTranslationRef = useRef<string | undefined>(undefined)
@@ -98,7 +133,7 @@ function ParsePageChunk({
   }, [translation, translating])
 
   return (
-    <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
+    <div data-page-num={page.page_number} style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
       {/* Header: page number + controls */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', padding: '1px 6px', borderRadius: 3, background: 'var(--surface3, #30302e)' }}>
@@ -207,7 +242,7 @@ function ParsePageChunk({
           <MarkdownRenderer content={translation} paperId={paperId} />
         </div>
       ) : (
-        <MarkdownRenderer content={page.markdown} paperId={paperId} />
+        <MarkdownRenderer content={applyHighlights(page.markdown, highlights)} paperId={paperId} />
       )}
     </div>
   )
@@ -229,6 +264,129 @@ export default function Reader() {
   const [showEngineModal, setShowEngineModal] = useState(false)
   const [showFullMarkdown, setShowFullMarkdown] = useState(false)
   const [pageInputValue, setPageInputValue] = useState('')
+  const [bookmarks, setBookmarks] = useState<Array<{ id: string; page_number: number; title: string | null; note: string | null; created_at: string }>>([])
+  const [tocTab, setTocTab] = useState<'outline' | 'bookmarks'>('outline')
+  // Notes sidebar
+  const [notesPanelOpen, setNotesPanelOpen] = useState(() => { try { return localStorage.getItem('paperlens:notesPanelOpen') === '1' } catch { return false } })
+  const [notesPanelW, setNotesPanelW] = useState(() => { try { const v = localStorage.getItem('paperlens:notesPanelW'); return v ? Number(v) : 320 } catch { return 320 } })
+  const [notesTab, setNotesTab] = useState<'notes' | 'glossary'>('notes')
+  const [notesList, setNotesList] = useState<Array<{ id: string; page_number: number; content: string; cited_text: string | null; color: string; created_at: string }>>([])
+  const [glossaryList, setGlossaryList] = useState<Array<{ id: string; term: string; phonetic: string | null; translation: string; explanation: string | null; is_pinned: boolean; lookup_count: number }>>([])
+  // Highlights
+  const [highlightsList, setHighlightsList] = useState<Array<{ id: string; page_number: number; text: string; color: string; note: string | null }>>([])
+  // Custom modals (replace native prompt)
+  const [noteModal, setNoteModal] = useState<{ text: string; pageNum: number } | null>(null)
+  const [noteInput, setNoteInput] = useState('')
+  const [bookmarkModalOpen, setBookmarkModalOpen] = useState(false)
+  const [bookmarkInput, setBookmarkInput] = useState('')
+  // Export modal
+  const [exportModalOpen, setExportModalOpen] = useState(false)
+  const [exportFormat, setExportFormat] = useState<'markdown' | 'pdf'>('markdown')
+  const [exportIncludeTranslation, setExportIncludeTranslation] = useState(false)
+
+  // Selection interaction (parse panel)
+  const parseScrollRef = useRef<HTMLDivElement>(null)
+  const [termPopup, setTermPopup] = useState<{ word: string; rect: { top: number; left: number }; data: any | null; loading: boolean } | null>(null)
+
+  // 依赖 reader.parsePanelOpen：面板打开时回调身份变化，触发 hook 重新绑定事件
+  const handleSelection = useCallback((_sel: { text: string; rect: any; pageNum: number | null } | null) => {
+    // selection state is tracked by the hook's returned `selection` value
+  }, [reader.parsePanelOpen])
+
+  const { selection, clearSelection } = useTextSelection(parseScrollRef, handleSelection)
+
+  const handleDoubleClickWord = useCallback(async (result: { word: string; rect: { top: number; left: number } }) => {
+    if (!reader.paper) return
+    setTermPopup({ word: result.word, rect: result.rect, data: null, loading: true })
+    try {
+      const data = await glossaryApi.lookup(result.word, reader.paper.id)
+      setTermPopup({ word: result.word, rect: result.rect, data, loading: false })
+    } catch {
+      setTermPopup({ word: result.word, rect: result.rect, data: null, loading: false })
+    }
+  }, [reader.paper, reader.parsePanelOpen])
+
+  const { result: doubleClickResult, clearResult: clearDoubleClick } = useDoubleClick(parseScrollRef, handleDoubleClickWord)
+
+  // Trigger double-click lookup
+  useEffect(() => {
+    if (doubleClickResult) {
+      handleDoubleClickWord(doubleClickResult)
+    }
+  }, [doubleClickResult, handleDoubleClickWord])
+
+  // Highlight actions
+  const handleCreateHighlight = useCallback(async (text: string, pageNum: number | null, color: string) => {
+    if (!reader.paper || !pageNum) return
+    const engine = reader.currentEngine || reader.selectedEngine
+    try {
+      await highlightsApi.create({
+        paper_id: reader.paper.id,
+        page_number: pageNum,
+        text,
+        color,
+        engine,
+      })
+      // 刷新高亮列表以在正文中显示标记
+      const res = await highlightsApi.list(reader.paper.id, undefined, engine)
+      setHighlightsList(res.items)
+      showToast('已添加高亮')
+    } catch {
+      showToast('添加高亮失败')
+    }
+    clearSelection()
+  }, [reader.paper, reader.currentEngine, reader.selectedEngine, showToast, clearSelection])
+
+  // Note action from selection — 打开自定义弹窗而非原生 prompt
+  const handleCreateNoteFromSelection = useCallback((text: string, pageNum: number | null) => {
+    if (!reader.paper || !pageNum) return
+    setNoteInput('')
+    setNoteModal({ text, pageNum })
+    // 不在这里 clearSelection，等弹窗确认/取消后再清
+  }, [reader.paper])
+
+  // 确认添加笔记
+  const handleConfirmNote = useCallback(async () => {
+    if (!noteModal || !reader.paper) return
+    const { text, pageNum } = noteModal
+    const content = noteInput.trim()
+    const engine = reader.currentEngine || reader.selectedEngine
+    if (!content) { showToast('请输入笔记内容'); return }
+    try {
+      await notesApi.create({
+        paper_id: reader.paper.id,
+        page_number: pageNum,
+        content,
+        cited_text: text,
+        engine,
+      })
+      showToast('已添加笔记')
+      if (notesPanelOpen) {
+        const res = await notesApi.list(reader.paper.id, undefined, engine)
+        setNotesList(res.items as any)
+      }
+    } catch {
+      showToast('添加笔记失败')
+    }
+    setNoteModal(null)
+    setNoteInput('')
+    clearSelection()
+  }, [noteModal, reader.paper, reader.currentEngine, reader.selectedEngine, noteInput, showToast, notesPanelOpen, clearSelection])
+
+  // Term lookup from selection
+  const handleLookupTerm = useCallback(async (text: string) => {
+    if (!reader.paper) return
+    const rect = selection?.rect
+    if (!rect) return
+    setTermPopup({ word: text, rect: { top: rect.top, left: rect.left }, data: null, loading: true })
+    try {
+      const data = await glossaryApi.lookup(text, reader.paper.id)
+      setTermPopup({ word: text, rect: { top: rect.top, left: rect.left }, data, loading: false })
+    } catch {
+      setTermPopup({ word: text, rect: { top: rect.top, left: rect.left }, data: null, loading: false })
+    }
+    clearSelection()
+  }, [reader.paper, selection, clearSelection])
 
   // ── 加载策略：PDF 优先，同时检测后台解析状态 ──
   useEffect(() => {
@@ -284,10 +442,20 @@ export default function Reader() {
     }
   }, [models, qa.activeModelId])
 
-  // Resizable panel widths
-  const [parsePanelW, setParsePanelW] = useState(420)
-  const [qaPanelW, setQaPanelW] = useState(380)
+  // Resizable panel widths (persisted to localStorage)
+  const [parsePanelW, setParsePanelW] = useState(() => {
+    const saved = localStorage.getItem('paperlens:parsePanelW')
+    return saved ? Number(saved) : 420
+  })
+  const [qaPanelW, setQaPanelW] = useState(() => {
+    const saved = localStorage.getItem('paperlens:qaPanelW')
+    return saved ? Number(saved) : 380
+  })
   const containerRef = useRef<HTMLDivElement>(null)
+
+  // Persist panel widths
+  useEffect(() => { localStorage.setItem('paperlens:parsePanelW', String(parsePanelW)) }, [parsePanelW])
+  useEffect(() => { localStorage.setItem('paperlens:qaPanelW', String(qaPanelW)) }, [qaPanelW])
 
   // Handle parse panel width change
   const handleParseWidthChange = useCallback((newParseWidth: number) => {
@@ -423,18 +591,373 @@ export default function Reader() {
     }
   }, [reader.parseStatus?.parse_status, reader.parsing])
 
+  // Load bookmarks when paper changes
+  useEffect(() => {
+    if (!reader.paper) { setBookmarks([]); return }
+    bookmarksApi.list(reader.paper.id).then((res) => setBookmarks(res.items)).catch(() => {})
+  }, [reader.paper?.id])
+
+  // Load highlights when paper changes or engine switches
+  useEffect(() => {
+    if (!reader.paper) { setHighlightsList([]); return }
+    const engine = reader.currentEngine || reader.selectedEngine
+    highlightsApi.list(reader.paper.id, undefined, engine).then((res) => setHighlightsList(res.items)).catch(() => {})
+  }, [reader.paper?.id, reader.currentEngine, reader.selectedEngine])
+
+  // Add bookmark — 打开自定义弹窗
+  const handleAddBookmark = useCallback(() => {
+    if (!reader.paper) return
+    setBookmarkInput('')
+    setBookmarkModalOpen(true)
+  }, [reader.paper])
+
+  // 确认添加书签
+  const handleConfirmBookmark = useCallback(async () => {
+    if (!reader.paper) return
+    const title = bookmarkInput.trim() || `第 ${reader.currentPage} 页`
+    try {
+      await bookmarksApi.create({
+        paper_id: reader.paper.id,
+        page_number: reader.currentPage,
+        title,
+      })
+      const res = await bookmarksApi.list(reader.paper.id)
+      setBookmarks(res.items)
+      showToast('已添加书签')
+    } catch {
+      showToast('添加书签失败')
+    }
+    setBookmarkModalOpen(false)
+    setBookmarkInput('')
+  }, [reader.paper, reader.currentPage, bookmarkInput, showToast])
+
+  // Delete bookmark
+  const handleDeleteBookmark = useCallback(async (bookmarkId: string) => {
+    try {
+      await bookmarksApi.delete(bookmarkId)
+      if (reader.paper) {
+        const res = await bookmarksApi.list(reader.paper.id)
+        setBookmarks(res.items)
+      }
+    } catch {
+      showToast('删除书签失败')
+    }
+  }, [reader.paper, showToast])
+
+  // ── 导出功能 ──
+  // 在 markdown 原文中标记高亮（导出用，用 <mark> 标签）
+  const applyHighlightsForExport = useCallback((markdown: string, pageHighlights: Array<{ text: string; color: string }>): string => {
+    if (!pageHighlights.length) return markdown
+    const sorted = [...pageHighlights].sort((a, b) => b.text.length - a.text.length)
+    const segments = markdown.split(/(<[^>]+>)/)
+    for (const hl of sorted) {
+      if (!hl.text || hl.text.length < 3) continue
+      if (hl.text.includes('<') || hl.text.includes('>')) continue
+      const markTag = `<mark style="background-color:${hl.color}">${hl.text}</mark>`
+      for (let i = 0; i < segments.length; i++) {
+        if (segments[i].startsWith('<') && segments[i].endsWith('>')) continue
+        if (segments[i].includes(hl.text)) {
+          segments[i] = segments[i].split(hl.text).join(markTag)
+        }
+      }
+    }
+    return segments.join('')
+  }, [])
+
+  const handleExport = useCallback(async () => {
+    if (!reader.paper || reader.pages.length === 0) {
+      showToast('没有可导出的内容')
+      return
+    }
+
+    const paper = reader.paper
+    const pages = reader.pages
+    const highlights = highlightsList
+    const notes = notesList
+    const translations = exportIncludeTranslation ? reader.translations : {}
+    const safeTitle = paper.title.replace(/[<>:"/\\|?*]/g, '_')
+
+    // ===== 构建导出 markdown（用于 .md 导出）=====
+    const lines: string[] = []
+    lines.push(`# ${paper.title}`)
+    lines.push('')
+    if (paper.authors && paper.authors.length > 0) {
+      lines.push(`> **作者**: ${paper.authors.join(', ')}`)
+    }
+    if (paper.year) lines.push(`> **年份**: ${paper.year}`)
+    if (paper.venue) lines.push(`> **会议**: ${paper.venue}`)
+    lines.push(`> **导出时间**: ${new Date().toLocaleString('zh-CN')}`)
+    if (highlights.length > 0) lines.push(`> **高亮数**: ${highlights.length}`)
+    if (notes.length > 0) lines.push(`> **笔记数**: ${notes.length}`)
+    lines.push('')
+    lines.push('---')
+    lines.push('')
+
+    for (const page of pages) {
+      lines.push(`## 第 ${page.page_number} 页`)
+      lines.push('')
+      const pageHighlights = highlights.filter((h) => h.page_number === page.page_number)
+      const contentWithHighlights = applyHighlightsForExport(page.markdown, pageHighlights)
+      lines.push(contentWithHighlights)
+      lines.push('')
+      const pageNotes = notes.filter((n) => n.page_number === page.page_number)
+      for (const note of pageNotes) {
+        lines.push('> 📝 **笔记**')
+        lines.push('>')
+        if (note.cited_text) { lines.push(`> > 引文: ${note.cited_text}`); lines.push('>') }
+        lines.push(`> ${note.content}`)
+        lines.push('')
+      }
+      lines.push('---')
+      lines.push('')
+    }
+
+    if (exportIncludeTranslation && Object.keys(translations).length > 0) {
+      lines.push('# 附：中文翻译')
+      lines.push('')
+      for (const page of pages) {
+        const translation = translations[page.page_number]
+        if (translation) {
+          lines.push(`## 第 ${page.page_number} 页译文`)
+          lines.push('')
+          lines.push(translation)
+          lines.push('')
+          lines.push('---')
+          lines.push('')
+        }
+      }
+    }
+
+    const markdownContent = lines.join('\n')
+
+    if (exportFormat === 'markdown') {
+      // ===== Markdown 导出 =====
+      const blob = new Blob([markdownContent], { type: 'text/markdown;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${safeTitle}_批注.md`
+      a.click()
+      URL.revokeObjectURL(url)
+      showToast(`已导出到下载文件夹：${safeTitle}_批注.md`)
+    } else {
+      // ===== HTML 导出（始终导出英文原文，保留完整格式，支持中英切换）=====
+      // 用 renderToStaticMarkup 渲染 MarkdownRenderer，始终用 page.markdown（英文原文）
+      // MarkdownRenderer 已在文件顶部导入
+
+      // 渲染每页原文 HTML（应用高亮标记）
+      const originalPagesHtml: string[] = []
+      const translationPagesHtml: string[] = []
+      let hasTranslations = false
+
+      for (const page of pages) {
+        const pageHighlights = highlights.filter((h) => h.page_number === page.page_number)
+        const contentWithHighlights = applyHighlightsForExport(page.markdown, pageHighlights)
+        const pageHtml = renderToStaticMarkup(
+          <MarkdownRenderer content={contentWithHighlights} paperId={paper.id} />
+        )
+        originalPagesHtml.push(`<div class="page-section" data-page="${page.page_number}"><h2>第 ${page.page_number} 页</h2><div class="content">${pageHtml}</div></div>`)
+
+        // 译文（如果有）
+        const translation = translations[page.page_number]
+        if (translation) {
+          hasTranslations = true
+          const transHtml = renderToStaticMarkup(
+            <MarkdownRenderer content={translation} paperId={paper.id} />
+          )
+          translationPagesHtml.push(`<div class="page-section" data-page="${page.page_number}"><h2>第 ${page.page_number} 页译文</h2><div class="content">${transHtml}</div></div>`)
+        }
+      }
+
+      // 构建笔记数据（按页分组）
+      const notesByPage: Record<number, Array<{ content: string; cited_text: string | null; color: string }>> = {}
+      for (const note of notes) {
+        if (!notesByPage[note.page_number]) notesByPage[note.page_number] = []
+        notesByPage[note.page_number].push({ content: note.content, cited_text: note.cited_text, color: note.color })
+      }
+
+      const showTranslationSection = exportIncludeTranslation && hasTranslations
+
+      const fullHtml = `<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${paper.title} - 批注导出</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: Georgia, 'Times New Roman', serif; background: #f5f4ed; color: #333; line-height: 1.8; }
+  .container { display: flex; max-width: 1200px; margin: 0 auto; min-height: 100vh; }
+  .main { flex: 1; padding: 40px; background: #fff; box-shadow: 0 0 8px rgba(0,0,0,0.06); }
+  .sidebar { width: 280px; flex-shrink: 0; padding: 40px 24px; background: #faf9f5; border-left: 1px solid #e8e6dc; }
+  .paper-header { margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #c96442; }
+  .paper-header h1 { font-size: 22px; color: #141413; margin-bottom: 8px; }
+  .paper-header .meta { font-size: 13px; color: #87867f; line-height: 1.6; }
+  /* 切换按钮 */
+  .lang-switch { display: flex; gap: 8px; margin-bottom: 24px; }
+  .lang-switch button { padding: 6px 16px; font-size: 13px; font-weight: 500; border: 1px solid #ddd; border-radius: 20px; background: #fff; color: #87867f; cursor: pointer; transition: all 0.2s; }
+  .lang-switch button.active { background: #c96442; color: #fff; border-color: #c96442; }
+  /* 内容区 */
+  .content-original { display: block; }
+  .content-translation { display: none; }
+  .page-section { margin-bottom: 32px; }
+  .page-section h2 { font-size: 14px; color: #c96442; margin-bottom: 12px; padding-bottom: 4px; border-bottom: 1px solid #f0eee6; }
+  .page-section .content { font-size: 14px; color: #333; }
+  .page-section .content p { margin: 8px 0; }
+  .page-section .content h1, .page-section .content h2, .page-section .content h3 { margin: 16px 0 8px; }
+  .page-section .content h1 { font-size: 18px; }
+  .page-section .content h2 { font-size: 16px; }
+  .page-section .content h3 { font-size: 14px; }
+  .page-section .content table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+  .page-section .content th, .page-section .content td { border: 1px solid #ddd; padding: 6px 10px; font-size: 13px; }
+  .page-section .content img { max-width: 100%; border-radius: 4px; margin: 8px 0; }
+  .page-section .content pre { background: #f5f4ed; padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 12px; }
+  .page-section .content code { background: #f5f4ed; padding: 1px 4px; border-radius: 3px; font-size: 0.9em; }
+  .page-section .content blockquote { border-left: 3px solid #c96442; margin: 12px 0; padding: 8px 16px; background: #faf9f5; color: #555; }
+  mark { padding: 1px 2px; border-radius: 2px; }
+  /* 侧边批注 */
+  .sidebar h3 { font-size: 14px; color: #c96442; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid #e8e6dc; }
+  .note-item { margin-bottom: 16px; padding: 10px 12px; background: #fff; border-radius: 8px; border-left: 3px solid #fbbf24; font-size: 12px; }
+  .note-item .note-page { font-size: 10px; color: #87867f; margin-bottom: 4px; font-weight: 600; }
+  .note-item .note-cited { font-size: 11px; color: #87867f; font-style: italic; margin-bottom: 4px; padding: 4px 8px; background: #f5f4ed; border-radius: 4px; }
+  .note-item .note-content { color: #4d4c48; line-height: 1.5; }
+  @media print { .sidebar { display: none; } .main { box-shadow: none; } body { background: #fff; } .lang-switch { display: none; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="main">
+    <div class="paper-header">
+      <h1>${paper.title}</h1>
+      <div class="meta">
+        ${paper.authors ? `作者: ${paper.authors.join(', ')}<br>` : ''}
+        ${paper.year ? `年份: ${paper.year}<br>` : ''}
+        ${paper.venue ? `会议: ${paper.venue}<br>` : ''}
+        导出时间: ${new Date().toLocaleString('zh-CN')}<br>
+        高亮: ${highlights.length} 处 | 笔记: ${notes.length} 条
+      </div>
+    </div>
+    ${showTranslationSection ? `
+    <div class="lang-switch">
+      <button id="btn-original" class="active" onclick="switchLang('original')">英文原文</button>
+      <button id="btn-translation" onclick="switchLang('translation')">中文翻译</button>
+    </div>` : ''}
+    <div class="content-original" id="content-original">
+      ${originalPagesHtml.join('')}
+    </div>
+    ${showTranslationSection ? `
+    <div class="content-translation" id="content-translation">
+      ${translationPagesHtml.join('')}
+    </div>` : ''}
+  </div>
+  <div class="sidebar">
+    <h3>📝 批注 (${notes.length})</h3>
+    <div id="notes-list"></div>
+  </div>
+</div>
+<script>
+  function switchLang(lang) {
+    var orig = document.getElementById('content-original');
+    var trans = document.getElementById('content-translation');
+    var btnO = document.getElementById('btn-original');
+    var btnT = document.getElementById('btn-translation');
+    if (lang === 'original') {
+      orig.style.display = 'block';
+      trans.style.display = 'none';
+      btnO.classList.add('active');
+      btnT.classList.remove('active');
+    } else {
+      orig.style.display = 'none';
+      trans.style.display = 'block';
+      btnO.classList.remove('active');
+      btnT.classList.add('active');
+    }
+  }
+  // 笔记数据
+  var notesByPage = ${JSON.stringify(notesByPage)};
+  var notesListEl = document.getElementById('notes-list');
+  if (notesListEl) {
+    var sortedPages = Object.keys(notesByPage).map(Number).sort(function(a,b){return a-b});
+    for (var pi = 0; pi < sortedPages.length; pi++) {
+      var pageNum = sortedPages[pi];
+      for (var ni = 0; ni < notesByPage[pageNum].length; ni++) {
+        var note = notesByPage[pageNum][ni];
+        var div = document.createElement('div');
+        div.className = 'note-item';
+        div.style.borderLeftColor = note.color || '#fbbf24';
+        var html = '<div class="note-page">第 ' + pageNum + ' 页</div>';
+        if (note.cited_text) {
+          html += '<div class="note-cited">' + note.cited_text.replace(/</g, '&lt;') + '</div>';
+        }
+        html += '<div class="note-content">' + note.content.replace(/</g, '&lt;') + '</div>';
+        div.innerHTML = html;
+        notesListEl.appendChild(div);
+      }
+    }
+    if (sortedPages.length === 0) {
+      notesListEl.innerHTML = '<div style="font-size:12px;color:#87867f;text-align:center;padding:20px;">暂无笔记</div>';
+    }
+  }
+</script>
+</body>
+</html>`
+
+      // 下载 HTML 文件到下载文件夹
+      const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${safeTitle}_批注.html`
+      a.click()
+      URL.revokeObjectURL(url)
+      showToast(`已导出到下载文件夹：${safeTitle}_批注.html`)
+    }
+
+    setExportModalOpen(false)
+  }, [reader.paper, reader.pages, reader.translations, highlightsList, notesList, exportFormat, exportIncludeTranslation, applyHighlightsForExport, showToast])
+
+  // Persist notes panel state
+  const toggleNotesPanel = useCallback(() => {
+    setNotesPanelOpen((prev) => {
+      const next = !prev
+      try { localStorage.setItem('paperlens:notesPanelOpen', next ? '1' : '0') } catch { /* ignore */ }
+      return next
+    })
+  }, [])
+  useEffect(() => { try { localStorage.setItem('paperlens:notesPanelW', String(notesPanelW)) } catch { /* ignore */ } }, [notesPanelW])
+
+  // Load notes and glossary when panel opens, paper changes, or engine switches
+  useEffect(() => {
+    if (!notesPanelOpen || !reader.paper) return
+    const engine = reader.currentEngine || reader.selectedEngine
+    notesApi.list(reader.paper.id, undefined, engine).then((res) => setNotesList(res.items as any)).catch(() => {})
+    glossaryApi.getPaperGlossary(reader.paper.id).then((res) => setGlossaryList(res.items as any)).catch(() => {})
+  }, [notesPanelOpen, reader.paper?.id, reader.currentEngine, reader.selectedEngine])
+
+  // Delete note
+  const handleDeleteNote = useCallback(async (noteId: string) => {
+    try {
+      await notesApi.delete(noteId)
+      if (reader.paper) {
+        const engine = reader.currentEngine || reader.selectedEngine
+        const res = await notesApi.list(reader.paper.id, undefined, engine)
+        setNotesList(res.items as any)
+      }
+    } catch { /* ignore */ }
+  }, [reader.paper, reader.currentEngine, reader.selectedEngine])
+
   /* ─── Loading states ─── */
 
   if (reader.loading && !reader.paper) {
     return (
-      <div className="theme-dark" style={S.root}>
+      <div style={S.root}>
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)' }}>加载中...</div>
       </div>
     )
   }
   if (!reader.paper) {
     return (
-      <div className="theme-dark" style={S.root}>
+      <div style={S.root}>
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
           <div style={{ color: 'var(--muted)' }}>论文不存在</div>
           <button style={S.accentBtn} onClick={() => navigate('/')}>返回文库</button>
@@ -448,7 +971,7 @@ export default function Reader() {
   /* ─── Render ─── */
 
   return (
-    <div className="theme-dark" style={S.root}>
+    <div style={S.root}>
       {/* ═══════ Toolbar ═══════ */}
       <header style={S.toolbar}>
         {/* Left */}
@@ -490,10 +1013,17 @@ export default function Reader() {
 
         {/* Right */}
         <div style={S.divider} />
+        <ToolBtn onClick={handleAddBookmark} title="添加书签" style={{ padding: '5px 10px' }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" /></svg>
+          书签
+        </ToolBtn>
+        <ToolBtn onClick={toggleNotesPanel} active={notesPanelOpen} style={{ border: '1px solid var(--accent)', padding: '5px 12px' }}>
+          笔记
+        </ToolBtn>
         <ToolBtn onClick={reader.toggleParsePanel} active={showParsePanel} style={{ border: '1px solid var(--accent)', padding: '5px 12px' }}>
           解析面板
         </ToolBtn>
-        <ToolBtn onClick={reader.toggleQaPanel} active={showQAPanel} style={{ background: showQAPanel ? 'var(--accent)' : 'var(--accent)', color: '#fff', padding: '5px 12px' }}>
+        <ToolBtn onClick={reader.toggleQaPanel} active={showQAPanel} style={{ background: showQAPanel ? 'var(--accent)' : 'transparent', color: showQAPanel ? '#fff' : 'var(--accent)', border: showQAPanel ? '1px solid var(--accent)' : '1px solid var(--accent)', padding: '5px 12px' }}>
           问答
         </ToolBtn>
       </header>
@@ -502,7 +1032,7 @@ export default function Reader() {
       <div ref={containerRef} style={S.main}>
         {/* ─── PDF Panel (with TOC overlay) ─── */}
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minWidth: 0, position: 'relative' }}>
-          {/* ─── TOC Toggle Button (always visible) ─── */}
+          {/* ─── TOC Toggle Button (hidden when TOC is open to avoid overlap) ─── */}
           <button
             onClick={reader.toggleToc}
             style={{
@@ -516,7 +1046,7 @@ export default function Reader() {
               background: reader.tocOpen ? 'var(--accent)' : 'rgba(0,0,0,0.5)',
               color: '#fff',
               cursor: 'pointer',
-              display: 'flex',
+              display: reader.tocOpen ? 'none' : 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               zIndex: 11,
@@ -560,11 +1090,68 @@ export default function Reader() {
               zIndex: 10,
               boxShadow: '2px 0 8px rgba(0,0,0,0.1)',
             }}>
-              <div style={{ ...S.tocHeader, justifyContent: 'flex-end' }}>
+              <div style={{ ...S.tocHeader, justifyContent: 'space-between' }}>
+                {/* Tabs */}
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button
+                    onClick={() => setTocTab('outline')}
+                    style={{
+                      padding: '4px 10px', fontSize: 12, fontWeight: 500, borderRadius: 4, border: 'none',
+                      background: tocTab === 'outline' ? 'var(--surface3, #30302e)' : 'transparent',
+                      color: tocTab === 'outline' ? 'var(--fg)' : 'var(--stone)', cursor: 'pointer',
+                    }}
+                  >
+                    目录
+                  </button>
+                  <button
+                    onClick={() => setTocTab('bookmarks')}
+                    style={{
+                      padding: '4px 10px', fontSize: 12, fontWeight: 500, borderRadius: 4, border: 'none',
+                      background: tocTab === 'bookmarks' ? 'var(--surface3, #30302e)' : 'transparent',
+                      color: tocTab === 'bookmarks' ? 'var(--coral)' : 'var(--stone)', cursor: 'pointer',
+                    }}
+                  >
+                    书签{bookmarks.length > 0 ? ` (${bookmarks.length})` : ''}
+                  </button>
+                </div>
                 <button style={S.iconBtn} onClick={reader.toggleToc}><IconClose /></button>
               </div>
               <div style={{ flex: 1, overflow: 'auto', padding: '4px 0' }}>
-                {reader.parseStatus?.parse_status === 'parsing' ? (
+                {tocTab === 'bookmarks' ? (
+                  /* ─── Bookmarks tab ─── */
+                  bookmarks.length > 0 ? (
+                    bookmarks.map((bm) => (
+                      <div
+                        key={bm.id}
+                        style={{
+                          ...S.tocItem,
+                          justifyContent: 'space-between',
+                        }}
+                        onClick={() => handlePageChange(bm.page_number)}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--surface2, #262624)' }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+                      >
+                        <div style={{ flex: 1, overflow: 'hidden' }}>
+                          <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bm.title || `第 ${bm.page_number} 页`}</span>
+                          {bm.note && <span style={{ fontSize: 10, color: 'var(--stone)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bm.note}</span>}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <span style={{ fontSize: 10, color: 'var(--stone)', padding: '1px 6px', borderRadius: 3, background: 'var(--surface3, #30302e)' }}>P{bm.page_number}</span>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleDeleteBookmark(bm.id) }}
+                            style={{ background: 'none', border: 'none', color: 'var(--stone)', cursor: 'pointer', padding: '2px', fontSize: 12, lineHeight: 1 }}
+                            title="删除书签"
+                          >×</button>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ padding: '24px 14px', fontSize: 12, color: 'var(--stone)', textAlign: 'center' }}>
+                      <div style={{ marginBottom: 8 }}>🔖</div>
+                      暂无书签<br /><span style={{ fontSize: 11 }}>点击工具栏"书签"按钮添加</span>
+                    </div>
+                  )
+                ) : reader.parseStatus?.parse_status === 'parsing' ? (
                   <div style={{ padding: '24px 14px', fontSize: 12, color: 'var(--stone)', textAlign: 'center' }}>
                     <div style={{ marginBottom: 8 }}>📄</div>
                     解析中...<br /><span style={{ fontSize: 11 }}>请稍后再试</span>
@@ -701,14 +1288,45 @@ export default function Reader() {
                     全文
                   </button>
                 )}
+                {/* Export button */}
+                {isParsed && reader.pages.length > 0 && (
+                  <button
+                    style={{
+                      ...S.iconBtn,
+                      color: 'var(--muted)',
+                      fontSize: 12,
+                      width: 'auto',
+                      padding: '4px 8px',
+                      gap: 4,
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                    onClick={() => setExportModalOpen(true)}
+                    onMouseEnter={(e) => e.currentTarget.style.color = 'var(--fg)'}
+                    onMouseLeave={(e) => e.currentTarget.style.color = 'var(--muted)'}
+                    title="导出批注"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="7 10 12 15 17 10" />
+                      <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    导出
+                  </button>
+                )}
                 <button style={S.iconBtn} onClick={reader.toggleParsePanel}><IconClose /></button>
               </div>
             </div>
 
             {/* Parse body — scrollable, all pages */}
-            <div style={{ flex: 1, overflow: 'auto' }}>
+            <div ref={parseScrollRef} style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
               {reader.parsing ? (
-                <ParseLoading engineName={reader.selectedEngine} />
+                <ParseLoading
+                  engineName={reader.selectedEngine}
+                  progress={reader.parseProgress}
+                  pagesDone={reader.parsePagesDone}
+                  totalPages={reader.parseTotalPages || totalPages}
+                />
               ) : reader.parseStatus?.parse_status === 'failed' ? (
                 /* 解析失败状态 */
                 <div style={{
@@ -783,6 +1401,7 @@ export default function Reader() {
                       onTranslate={() => handleTranslatePage(page.page_number)}
                       onRetranslate={() => handleTranslatePage(page.page_number, true)}
                       translating={isTranslating}
+                      highlights={highlightsList.filter((h) => h.page_number === page.page_number)}
                     />
                   )
                 })
@@ -820,6 +1439,251 @@ export default function Reader() {
                   </button>
                 </div>
               )}
+
+              {/* ─── Selection Popup (highlight / note / term) ─── */}
+              {selection && selection.text && selection.rect && (
+                <div
+                  className="selection-popup"
+                  data-no-clear
+                  style={{
+                    position: 'absolute',
+                    top: selection.rect.top - 44,
+                    left: selection.rect.left,
+                    display: 'flex',
+                    gap: 2,
+                    background: 'var(--surface3, #30302e)',
+                    borderRadius: 8,
+                    padding: 4,
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+                    zIndex: 20,
+                  }}
+                >
+                  {/* Highlight colors */}
+                  {['#fef08a', '#fca5a5', '#a5f3a5', '#a5c8ff', '#f5a5e8'].map((color) => (
+                    <button
+                      key={color}
+                      data-no-clear
+                      onClick={() => handleCreateHighlight(selection.text, selection.pageNum, color)}
+                      style={{
+                        width: 20, height: 20, borderRadius: 4, border: '1px solid rgba(255,255,255,0.2)',
+                        background: color, cursor: 'pointer', padding: 0,
+                      }}
+                      title="高亮"
+                    />
+                  ))}
+                  {/* Note button */}
+                  <button
+                    data-no-clear
+                    onClick={() => handleCreateNoteFromSelection(selection.text, selection.pageNum)}
+                    style={{
+                      padding: '2px 8px', fontSize: 11, borderRadius: 4, border: 'none',
+                      background: 'transparent', color: 'var(--fg)', cursor: 'pointer', whiteSpace: 'nowrap',
+                    }}
+                    title="添加笔记"
+                  >
+                    笔记
+                  </button>
+                  {/* Term lookup button */}
+                  <button
+                    data-no-clear
+                    onClick={() => handleLookupTerm(selection.text)}
+                    style={{
+                      padding: '2px 8px', fontSize: 11, borderRadius: 4, border: 'none',
+                      background: 'transparent', color: 'var(--coral)', cursor: 'pointer', whiteSpace: 'nowrap',
+                    }}
+                    title="查术语"
+                  >
+                    查词
+                  </button>
+                  {/* Quote to QA button */}
+                  <button
+                    data-no-clear
+                    onClick={() => {
+                      qa.setPendingQuote(selection.text)
+                      if (!reader.qaPanelOpen) reader.toggleQaPanel()
+                      clearSelection()
+                    }}
+                    style={{
+                      padding: '2px 8px', fontSize: 11, borderRadius: 4, border: 'none',
+                      background: 'transparent', color: 'var(--focus)', cursor: 'pointer', whiteSpace: 'nowrap',
+                    }}
+                    title="引用到问答"
+                  >
+                    引用
+                  </button>
+                </div>
+              )}
+
+              {/* ─── Term Popup (double-click / lookup result) ─── */}
+              {termPopup && (
+                <div
+                  className="term-popup"
+                  data-no-clear
+                  style={{
+                    position: 'absolute',
+                    top: termPopup.rect.top + 20,
+                    left: termPopup.rect.left,
+                    background: 'var(--surface3, #30302e)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 10,
+                    padding: '12px 14px',
+                    maxWidth: 300,
+                    minWidth: 200,
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                    zIndex: 21,
+                  }}
+                >
+                  {/* Header */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--coral)' }}>{termPopup.word}</span>
+                    <button
+                      data-no-clear
+                      onClick={() => { setTermPopup(null); clearDoubleClick() }}
+                      style={{ background: 'none', border: 'none', color: 'var(--stone)', cursor: 'pointer', padding: 0, fontSize: 16, lineHeight: 1 }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                  {termPopup.loading ? (
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>查询中...</div>
+                  ) : termPopup.data ? (
+                    <div>
+                      {termPopup.data.phonetic && (
+                        <div style={{ fontSize: 11, color: 'var(--stone)', marginBottom: 4, fontFamily: 'monospace' }}>/{termPopup.data.phonetic}/</div>
+                      )}
+                      <div style={{ fontSize: 13, color: 'var(--fg)', fontWeight: 500, marginBottom: 4 }}>{termPopup.data.translation}</div>
+                      {termPopup.data.explanation && (
+                        <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>{termPopup.data.explanation}</div>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>未找到释义</div>
+                  )}
+                </div>
+              )}
+            </div>
+          </aside>
+        )}
+
+        {/* ─── Notes Resize Handle ─── */}
+        {notesPanelOpen && (
+          <ResizableHandle
+            visible={true}
+            width={notesPanelW}
+            onWidthChange={(w) => setNotesPanelW(Math.min(Math.max(w, 240), 500))}
+            onCollapse={toggleNotesPanel}
+            minWidth={240}
+            maxWidth={500}
+          />
+        )}
+
+        {/* ─── Notes Panel ─── */}
+        {notesPanelOpen && (
+          <aside
+            style={{
+              width: notesPanelW,
+              minWidth: notesPanelW,
+              background: 'var(--surface)',
+              borderLeft: '1px solid var(--border)',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              flexShrink: 0,
+            }}
+          >
+            {/* Notes header with tabs */}
+            <div style={{ ...S.parseHeader, gap: 4 }}>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button
+                  onClick={() => setNotesTab('notes')}
+                  style={{
+                    padding: '3px 10px', fontSize: 12, fontWeight: 500, borderRadius: 4, border: 'none',
+                    background: notesTab === 'notes' ? 'var(--surface3, #30302e)' : 'transparent',
+                    color: notesTab === 'notes' ? 'var(--fg)' : 'var(--stone)', cursor: 'pointer',
+                  }}
+                >
+                  笔记{notesList.length > 0 ? ` (${notesList.length})` : ''}
+                </button>
+                <button
+                  onClick={() => setNotesTab('glossary')}
+                  style={{
+                    padding: '3px 10px', fontSize: 12, fontWeight: 500, borderRadius: 4, border: 'none',
+                    background: notesTab === 'glossary' ? 'var(--surface3, #30302e)' : 'transparent',
+                    color: notesTab === 'glossary' ? 'var(--coral)' : 'var(--stone)', cursor: 'pointer',
+                  }}
+                >
+                  术语表{glossaryList.length > 0 ? ` (${glossaryList.length})` : ''}
+                </button>
+              </div>
+              <button style={S.iconBtn} onClick={toggleNotesPanel}><IconClose /></button>
+            </div>
+
+            {/* Notes/glossary body */}
+            <div style={{ flex: 1, overflow: 'auto', padding: '4px 0' }}>
+              {notesTab === 'notes' ? (
+                notesList.length > 0 ? (
+                  notesList.map((note) => (
+                    <div
+                      key={note.id}
+                      style={{
+                        padding: '10px 14px',
+                        borderBottom: '1px solid var(--border)',
+                        cursor: 'pointer',
+                        borderLeft: `3px solid ${note.color}`,
+                      }}
+                      onClick={() => handlePageChange(note.page_number)}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--surface2, #262624)' }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+                    >
+                      <div style={{ fontSize: 11, color: 'var(--stone)', marginBottom: 4, display: 'flex', justifyContent: 'space-between' }}>
+                        <span>第 {note.page_number} 页</span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDeleteNote(note.id) }}
+                          style={{ background: 'none', border: 'none', color: 'var(--stone)', cursor: 'pointer', padding: 0, fontSize: 12 }}
+                          title="删除笔记"
+                        >×</button>
+                      </div>
+                      {note.cited_text && (
+                        <div style={{ fontSize: 11, color: 'var(--muted)', fontStyle: 'italic', marginBottom: 4, padding: '4px 8px', background: 'var(--surface2, #262624)', borderRadius: 4, borderLeft: `2px solid ${note.color}` }}>
+                          {note.cited_text.length > 80 ? note.cited_text.slice(0, 80) + '...' : note.cited_text}
+                        </div>
+                      )}
+                      <div style={{ fontSize: 12, color: 'var(--fg)', lineHeight: 1.5 }}>{note.content}</div>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ padding: '24px 14px', fontSize: 12, color: 'var(--stone)', textAlign: 'center' }}>
+                    <div style={{ marginBottom: 8 }}>📝</div>
+                    暂无笔记<br /><span style={{ fontSize: 11 }}>在解析面板选中文本添加笔记</span>
+                  </div>
+                )
+              ) : (
+                /* Glossary tab */
+                glossaryList.length > 0 ? (
+                  glossaryList.map((entry) => (
+                    <div
+                      key={entry.id}
+                      style={{
+                        padding: '10px 14px',
+                        borderBottom: '1px solid var(--border)',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--coral)' }}>{entry.term}</span>
+                        {entry.is_pinned && <span style={{ fontSize: 10, color: 'var(--accent)' }}>★置顶</span>}
+                      </div>
+                      {entry.phonetic && <div style={{ fontSize: 11, color: 'var(--stone)', fontFamily: 'monospace', marginBottom: 2 }}>/{entry.phonetic}/</div>}
+                      <div style={{ fontSize: 12, color: 'var(--fg)', fontWeight: 500 }}>{entry.translation}</div>
+                      {entry.explanation && <div style={{ fontSize: 11, color: 'var(--muted)', lineHeight: 1.5, marginTop: 2 }}>{entry.explanation}</div>}
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ padding: '24px 14px', fontSize: 12, color: 'var(--stone)', textAlign: 'center' }}>
+                    <div style={{ marginBottom: 8 }}>📖</div>
+                    暂无术语<br /><span style={{ fontSize: 11 }}>双击单词或选中文本查术语</span>
+                  </div>
+                )
+              )}
             </div>
           </aside>
         )}
@@ -849,6 +1713,11 @@ export default function Reader() {
             messages={qa.messages}
             streaming={qa.streaming}
             streamingContent={qa.streamingContent}
+            streamingThinking={qa.streamingThinking}
+            pendingQuote={qa.pendingQuote}
+            enableThinking={qa.enableThinking}
+            onToggleThinking={qa.toggleThinking}
+            onClearQuote={() => qa.setPendingQuote(null)}
             attachedImages={qa.attachedImages}
             onSendMessage={handleSendMessage}
             onStopGeneration={qa.stopGeneration}
@@ -886,6 +1755,224 @@ export default function Reader() {
         paperId={reader.paper?.id || ''}
         paperTitle={reader.paper?.title || ''}
       />
+
+      {/* ═══════ Note Modal (替代原生 prompt) ═══════ */}
+      <Modal
+        open={noteModal !== null}
+        onClose={() => { setNoteModal(null); setNoteInput(''); clearSelection() }}
+        title="添加笔记"
+        footer={
+          <>
+            <button
+              onClick={() => { setNoteModal(null); setNoteInput(''); clearSelection() }}
+              style={{ padding: '8px 16px', background: 'var(--sand)', color: 'var(--fg)', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: 'pointer' }}
+            >
+              取消
+            </button>
+            <button
+              onClick={handleConfirmNote}
+              style={{ padding: '8px 16px', background: 'var(--accent)', color: 'var(--white)', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: 'pointer' }}
+            >
+              添加
+            </button>
+          </>
+        }
+      >
+        {noteModal && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* 引文预览 */}
+            {noteModal.text && (
+              <div style={{
+                padding: '12px 14px',
+                background: 'var(--surface2)',
+                borderRadius: 8,
+                borderLeft: '3px solid var(--accent)',
+                fontSize: 13,
+                color: 'var(--muted)',
+                fontStyle: 'italic',
+                lineHeight: 1.6,
+                maxHeight: 120,
+                overflow: 'auto',
+              }}>
+                {noteModal.text.length > 150 ? noteModal.text.slice(0, 150) + '...' : noteModal.text}
+              </div>
+            )}
+            {/* 笔记输入 */}
+            <textarea
+              value={noteInput}
+              onChange={(e) => setNoteInput(e.target.value)}
+              autoFocus
+              placeholder="输入笔记内容..."
+              onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleConfirmNote() }}
+              style={{
+                width: '100%',
+                minHeight: 100,
+                padding: '12px 14px',
+                border: '1px solid var(--border2)',
+                borderRadius: 8,
+                fontSize: 14,
+                color: 'var(--fg)',
+                background: 'var(--surface)',
+                outline: 'none',
+                resize: 'vertical',
+                fontFamily: 'var(--font-sans)',
+                lineHeight: 1.6,
+              }}
+              onFocus={(e) => e.currentTarget.style.borderColor = 'var(--accent)'}
+              onBlur={(e) => e.currentTarget.style.borderColor = 'var(--border2)'}
+            />
+            <div style={{ fontSize: 11, color: 'var(--silver)' }}>Ctrl+Enter 快速添加</div>
+          </div>
+        )}
+      </Modal>
+
+      {/* ═══════ Bookmark Modal (替代原生 prompt) ═══════ */}
+      <Modal
+        open={bookmarkModalOpen}
+        onClose={() => { setBookmarkModalOpen(false); setBookmarkInput('') }}
+        title={`添加书签 · 第 ${reader.currentPage} 页`}
+        footer={
+          <>
+            <button
+              onClick={() => { setBookmarkModalOpen(false); setBookmarkInput('') }}
+              style={{ padding: '8px 16px', background: 'var(--sand)', color: 'var(--fg)', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: 'pointer' }}
+            >
+              取消
+            </button>
+            <button
+              onClick={handleConfirmBookmark}
+              style={{ padding: '8px 16px', background: 'var(--accent)', color: 'var(--white)', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: 'pointer' }}
+            >
+              添加
+            </button>
+          </>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <input
+            type="text"
+            value={bookmarkInput}
+            onChange={(e) => setBookmarkInput(e.target.value)}
+            autoFocus
+            placeholder={`书签标题（可选，默认"第 ${reader.currentPage} 页"）`}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleConfirmBookmark() }}
+            style={{
+              width: '100%',
+              padding: '10px 14px',
+              border: '1px solid var(--border2)',
+              borderRadius: 8,
+              fontSize: 14,
+              color: 'var(--fg)',
+              background: 'var(--surface)',
+              outline: 'none',
+              fontFamily: 'var(--font-sans)',
+            }}
+            onFocus={(e) => e.currentTarget.style.borderColor = 'var(--accent)'}
+            onBlur={(e) => e.currentTarget.style.borderColor = 'var(--border2)'}
+          />
+        </div>
+      </Modal>
+
+      {/* ═══════ Export Modal ═══════ */}
+      <Modal
+        open={exportModalOpen}
+        onClose={() => setExportModalOpen(false)}
+        title="导出批注"
+        footer={
+          <>
+            <button
+              onClick={() => setExportModalOpen(false)}
+              style={{ padding: '8px 16px', background: 'var(--sand)', color: 'var(--fg)', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: 'pointer' }}
+            >
+              取消
+            </button>
+            <button
+              onClick={handleExport}
+              style={{ padding: '8px 16px', background: 'var(--accent)', color: 'var(--white)', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: 'pointer' }}
+            >
+              导出
+            </button>
+          </>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* 格式选择 */}
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--fg2)', marginBottom: 10 }}>导出格式</div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => setExportFormat('markdown')}
+                style={{
+                  flex: 1, padding: '12px 16px', borderRadius: 10, cursor: 'pointer',
+                  border: exportFormat === 'markdown' ? '2px solid var(--accent)' : '1px solid var(--border2)',
+                  background: exportFormat === 'markdown' ? 'rgba(201,100,66,0.05)' : 'var(--surface)',
+                  display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center',
+                }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={exportFormat === 'markdown' ? 'var(--accent)' : 'var(--muted)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                </svg>
+                <span style={{ fontSize: 12, fontWeight: 500, color: exportFormat === 'markdown' ? 'var(--accent)' : 'var(--muted)' }}>Markdown</span>
+              </button>
+              <button
+                onClick={() => setExportFormat('pdf')}
+                style={{
+                  flex: 1, padding: '12px 16px', borderRadius: 10, cursor: 'pointer',
+                  border: exportFormat === 'pdf' ? '2px solid var(--accent)' : '1px solid var(--border2)',
+                  background: exportFormat === 'pdf' ? 'rgba(201,100,66,0.05)' : 'var(--surface)',
+                  display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center',
+                }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={exportFormat === 'pdf' ? 'var(--accent)' : 'var(--muted)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 2H14l4 4v16a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2z" />
+                  <path d="M14 2v4h4" />
+                </svg>
+                <span style={{ fontSize: 12, fontWeight: 500, color: exportFormat === 'pdf' ? 'var(--accent)' : 'var(--muted)' }}>HTML（网页）</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 携带翻译 */}
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--fg2)', marginBottom: 8 }}>携带中文翻译</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button
+                onClick={() => setExportIncludeTranslation(!exportIncludeTranslation)}
+                style={{
+                  width: 40, height: 22, borderRadius: 11, border: 'none', cursor: 'pointer',
+                  background: exportIncludeTranslation ? 'var(--accent)' : 'var(--border2)',
+                  position: 'relative', transition: 'background 0.2s',
+                }}
+              >
+                <div style={{
+                  position: 'absolute', top: 2, left: exportIncludeTranslation ? 20 : 2,
+                  width: 18, height: 18, borderRadius: '50%', background: '#fff',
+                  transition: 'left 0.2s',
+                }} />
+              </button>
+              <span style={{ fontSize: 13, color: 'var(--muted)' }}>
+                {exportIncludeTranslation ? '包含已翻译页面的中文译文' : '仅导出英文原文'}
+              </span>
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--silver)', marginTop: 6, lineHeight: 1.5 }}>
+              开启后，已翻译的页面会在原文后附加中文译文。未翻译的页面不添加译文。
+            </div>
+          </div>
+
+          {/* 导出内容预览 */}
+          <div style={{
+            padding: '12px 14px', background: 'var(--surface2)', borderRadius: 8,
+            fontSize: 12, color: 'var(--muted)', lineHeight: 1.6,
+          }}>
+            <div style={{ fontWeight: 500, color: 'var(--fg2)', marginBottom: 6 }}>导出内容包含：</div>
+            <div>• 论文原文（按页排列，高亮文本用颜色标记）</div>
+            {notesList.length > 0 && <div>• {notesList.length} 条笔记（作为批注附在对应页下方）</div>}
+            {highlightsList.length > 0 && <div>• {highlightsList.length} 处高亮（用彩色背景标记）</div>}
+            {exportIncludeTranslation && <div>• 已翻译页面的中文译文</div>}
+          </div>
+        </div>
+      </Modal>
 
       {/* Animations */}
       <style>{`

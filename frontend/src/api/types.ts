@@ -4,6 +4,10 @@ export interface Paper {
   authors: string[] | null
   year: number | null
   venue: string | null
+  abstract: string | null
+  doi: string | null
+  arxiv_id: string | null
+  source_url: string | null
   total_pages: number
   pages_parsed: number
   pages_translated: number
@@ -59,6 +63,26 @@ export interface Note {
   updated_at: string
 }
 
+export interface Highlight {
+  id: string
+  page_number: number
+  paragraph_index: number | null
+  start_offset: number | null
+  end_offset: number | null
+  text: string
+  color: string
+  note: string | null
+  created_at: string
+}
+
+export interface Bookmark {
+  id: string
+  page_number: number
+  title: string | null
+  note: string | null
+  created_at: string
+}
+
 export interface GlossaryEntry {
   id: string
   term: string
@@ -75,6 +99,7 @@ export interface Conversation {
   model_name: string
   message_count: number
   tokens_used: number
+  is_archived: boolean
   created_at: string
   updated_at: string
 }
@@ -83,6 +108,7 @@ export interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
+  thinking: string | null
   citations: Citation[] | null
   tool_calls: unknown[] | null
   model_id: string | null
@@ -177,11 +203,14 @@ export interface Settings {
   parse_engine: string
   parse_service_url: string
   vision_model_id: string | null
+  enable_thinking: boolean
+  glossary_model_id: string | null
 }
 
 export interface SSEEvent {
-  type: 'content' | 'done' | 'error'
+  type: 'content' | 'done' | 'error' | 'stopped' | 'thinking'
   content?: string
+  thinking?: string
   message_id?: string
   tokens_input?: number
   tokens_output?: number

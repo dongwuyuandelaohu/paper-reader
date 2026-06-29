@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { X, Send, Square, Plus, Paperclip, Copy, ExternalLink } from 'lucide-react'
+import { X, Send, Square, Plus, Paperclip, Copy, ExternalLink, Brain } from 'lucide-react'
 import type { AIModel, ImageAttachment, Message, Citation } from '@/api/types'
 import { ModelSelector } from './ModelSelector'
+import { MarkdownRenderer } from './MarkdownRenderer'
 
 const BLINK_STYLE =
   '@keyframes qa-blink{0%,50%{opacity:1}51%,100%{opacity:0}}'
@@ -17,6 +18,11 @@ interface QAPanelProps {
   messages: Message[]
   streaming: boolean
   streamingContent: string
+  streamingThinking: string
+  pendingQuote: string | null
+  enableThinking: boolean
+  onToggleThinking: () => void
+  onClearQuote: () => void
   attachedImages: ImageAttachment[]
   onSendMessage: (content: string) => void
   onStopGeneration: () => void
@@ -39,6 +45,11 @@ export function QAPanel({
   messages,
   streaming,
   streamingContent,
+  streamingThinking,
+  pendingQuote,
+  enableThinking,
+  onToggleThinking,
+  onClearQuote,
   attachedImages,
   onSendMessage,
   onStopGeneration,
@@ -81,12 +92,15 @@ export function QAPanel({
   const handleSend = useCallback(() => {
     const text = input.trim()
     if (!text || streaming) return
-    onSendMessage(text)
+    // 如果有引用，拼接引用到消息中
+    const quote = pendingQuote ? `> ${pendingQuote.replace(/\n/g, '\n> ')}\n\n` : ''
+    onSendMessage(quote + text)
     setInput('')
+    onClearQuote()  // 清除引用
     if (textareaRef.current) {
       textareaRef.current.style.height = '38px'
     }
-  }, [input, streaming, onSendMessage])
+  }, [input, streaming, onSendMessage, pendingQuote, onClearQuote])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -330,6 +344,23 @@ export function QAPanel({
           />
         ))}
 
+        {/* Streaming thinking content */}
+        {streaming && streamingThinking && (
+          <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+            <div style={{
+              maxWidth: '85%', padding: '8px 12px',
+              background: 'var(--surface3)', borderRadius: '8px',
+              fontSize: 12, lineHeight: 1.6, color: 'var(--muted)',
+              whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+              borderLeft: '2px solid var(--focus)',
+              fontStyle: 'italic',
+            }}>
+              <div style={{ fontSize: 10, color: 'var(--focus)', marginBottom: 4, fontWeight: 600 }}>思考中...</div>
+              {streamingThinking}
+            </div>
+          </div>
+        )}
+
         {/* Streaming indicator */}
         {streaming && (
           <div
@@ -347,11 +378,10 @@ export function QAPanel({
                 fontSize: '13px',
                 lineHeight: '1.6',
                 color: 'var(--fg)',
-                whiteSpace: 'pre-wrap',
                 wordBreak: 'break-word',
               }}
             >
-              {streamingContent}
+              <MarkdownRenderer content={streamingContent} paperId="" />
               <span
                 style={{
                   display: 'inline-block',
@@ -369,6 +399,41 @@ export function QAPanel({
 
         <div ref={messagesEndRef} />
       </div>
+
+      {/* ── Pending Quote ── */}
+      {pendingQuote && (
+        <div style={{
+          padding: '8px 12px', flexShrink: 0,
+          borderTop: '1px solid var(--border)',
+        }}>
+          <div style={{
+            display: 'flex', gap: 8, alignItems: 'flex-start',
+            background: 'var(--surface3)', borderRadius: 8,
+            padding: '8px 10px', borderLeft: '3px solid var(--focus)',
+          }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 10, color: 'var(--focus)', fontWeight: 600, marginBottom: 4 }}>引用原文</div>
+              <div style={{
+                fontSize: 12, color: 'var(--muted)', lineHeight: 1.5,
+                fontStyle: 'italic',
+                maxHeight: 80, overflowY: 'auto',
+                whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+              }}>
+                {pendingQuote.length > 200 ? pendingQuote.slice(0, 200) + '...' : pendingQuote}
+              </div>
+            </div>
+            <button
+              onClick={onClearQuote}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                padding: '2px', color: 'var(--stone)', flexShrink: 0,
+              }}
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Image Preview ── */}
       {attachedImages.length > 0 && (
@@ -526,6 +591,28 @@ export function QAPanel({
             }}
           />
 
+          {/* Deep thinking toggle */}
+          <button
+            onClick={onToggleThinking}
+            title="深度思考模式"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: enableThinking ? 'var(--surface3)' : 'none',
+              border: enableThinking ? 'none' : '1px solid var(--border)',
+              borderRadius: '6px',
+              padding: '4px',
+              cursor: 'pointer',
+              color: enableThinking ? 'var(--coral)' : 'var(--muted)',
+              flexShrink: 0,
+              width: '30px',
+              height: '30px',
+            }}
+          >
+            <Brain size={14} strokeWidth={2} />
+          </button>
+
           {/* Send / Stop */}
           {streaming ? (
             <button
@@ -616,6 +703,12 @@ function MessageBubble({
   onCopy: () => void
 }) {
   const isUser = message.role === 'user'
+  const [showThinking, setShowThinking] = useState(false)
+
+  // Parse markdown quote (lines starting with "> ") from user message content
+  const quoteMatch = message.content.match(/^> (.+?)\n\n([\s\S]*)$/s)
+  const quoteText = quoteMatch ? quoteMatch[1].replace(/\n> /g, '\n') : null
+  const mainText = quoteMatch ? quoteMatch[2] : message.content
 
   return (
     <div
@@ -625,6 +718,36 @@ function MessageBubble({
         alignItems: isUser ? 'flex-end' : 'flex-start',
       }}
     >
+      {/* Thinking block (assistant only, before message bubble) */}
+      {!isUser && message.thinking && (
+        <div style={{ marginBottom: 6, maxWidth: '85%' }}>
+          <button
+            onClick={() => setShowThinking(!showThinking)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 4,
+              background: 'none', border: '1px solid var(--border)',
+              borderRadius: 6, padding: '3px 8px',
+              fontSize: 10, color: 'var(--focus)', cursor: 'pointer',
+            }}
+          >
+            <Brain size={10} />
+            {showThinking ? '收起思考' : '展开思考'}
+          </button>
+          {showThinking && (
+            <div style={{
+              marginTop: 4, padding: '8px 12px',
+              background: 'var(--surface3)', borderRadius: 8,
+              fontSize: 12, lineHeight: 1.6, color: 'var(--muted)',
+              whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+              borderLeft: '2px solid var(--focus)', fontStyle: 'italic',
+              maxHeight: 300, overflowY: 'auto',
+            }}>
+              {message.thinking}
+            </div>
+          )}
+        </div>
+      )}
+
       <div
         style={{
           maxWidth: '85%',
@@ -634,11 +757,23 @@ function MessageBubble({
           borderRadius: isUser ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
           fontSize: '13px',
           lineHeight: '1.6',
-          whiteSpace: 'pre-wrap',
+          whiteSpace: isUser ? 'pre-wrap' : 'normal',
           wordBreak: 'break-word',
         }}
       >
-        {message.content}
+        {/* Render quoted original text with distinct style */}
+        {quoteText && (
+          <div style={{
+            borderLeft: '2px solid rgba(255,255,255,0.4)',
+            paddingLeft: 8,
+            marginBottom: 6,
+            fontStyle: 'italic',
+            opacity: 0.85,
+          }}>
+            {quoteText}
+          </div>
+        )}
+        {isUser ? mainText : <MarkdownRenderer content={mainText} paperId="" />}
       </div>
 
       {/* Citations */}
