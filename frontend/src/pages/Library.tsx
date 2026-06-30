@@ -57,6 +57,7 @@ export default function Library() {
     papers, total, loading, loadingMore, hasMore, filter, sort, order, tagId, viewMode, selectedIds,
     fetchPapers, fetchMore, setFilter, setSort, setOrder, setSearch, setViewMode,
     toggleSelect, clearSelection, toggleFavorite, deletePaper, uploadPaperFromUrl,
+    setTagId,
   } = usePaperStore()
 
   const { tags, fetchTags, createTag, assignToPaper } = useTagStore()
@@ -285,7 +286,11 @@ export default function Library() {
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg)' }}>
-      <Sidebar currentPage="library" />
+      <Sidebar
+        currentPage="library"
+        activeTagId={tagId}
+        onTagClick={(id) => setTagId(id === tagId ? null : id)}
+      />
 
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 

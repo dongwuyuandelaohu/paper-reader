@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Sidebar } from '../components/Sidebar'
 import { useSettingsStore } from '../stores/useSettingsStore'
 import { useToastStore } from '../components/Toast'
@@ -108,10 +109,6 @@ function SelectInput({ value, onChange, options }: {
       }} />
     </div>
   )
-}
-
-function SectionDivider() {
-  return <div style={{ height: 1, background: 'var(--border)', margin: '32px 0' }} />
 }
 
 function SectionTitle({ icon, title }: { icon: React.ReactNode; title: string }) {
@@ -425,6 +422,7 @@ function EngineCard({ engine, isDefault, onSetDefault, onInstallComplete }: {
 export default function Settings() {
   const { settings, engines, models, loading, fetchSettings, updateSettings, resetSettings, fetchEngines, fetchModels } = useSettingsStore()
   const showToast = useToastStore((s) => s.showToast)
+  const navigate = useNavigate()
 
   // Local state mirrors
   const [parseEngine, setParseEngine] = useState('')
@@ -445,6 +443,7 @@ export default function Settings() {
   const [hasChanges, setHasChanges] = useState(false)
   const [dataInfo, setDataInfo] = useState<{ data_dir: string; db_size: number; parse_cache_size: number; papers_size: number; paper_count: number; pages_count: number; translations_count: number } | null>(null)
   const [clearing, setClearing] = useState<string | null>(null)
+  const [activeSection, setActiveSection] = useState<string>('engine')
 
   // Initial load
   useEffect(() => {
@@ -614,36 +613,120 @@ export default function Settings() {
       <main style={{
         flex: 1,
         display: 'flex',
-        flexDirection: 'column',
         overflow: 'hidden',
         position: 'relative',
       }}>
-        {/* Header */}
-        <div style={{ padding: '32px 48px 0', flexShrink: 0 }}>
-          <h1 style={{
-            fontFamily: 'var(--font-serif)',
-            fontSize: 28,
-            fontWeight: 700,
-            color: 'var(--fg)',
-            marginBottom: 6,
-          }}>
-            系统设置
-          </h1>
-          <p style={{ fontSize: 14, color: 'var(--stone)', lineHeight: 1.5 }}>
-            自定义 PaperLens 的行为和外观，管理解析引擎与阅读偏好
-          </p>
+        {/* ── Secondary menu (二级菜单) ── */}
+        <div style={{
+          width: '200px',
+          flexShrink: 0,
+          background: 'var(--surface)',
+          borderRight: '1px solid var(--border)',
+          padding: '24px 0',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '2px',
+        }}>
+          {[
+            { id: 'models', label: '模型管理', icon: Cpu },
+            { id: 'engine', label: '解析引擎', icon: Cpu },
+            { id: 'translate', label: '翻译设置', icon: Globe },
+            { id: 'reading', label: '阅读体验', icon: BookOpen },
+            { id: 'qa', label: '问答设置', icon: MessageSquare },
+            { id: 'data', label: '数据管理', icon: Folder },
+            { id: 'about', label: '关于', icon: Info },
+          ].map((item) => {
+            const Icon = item.icon
+            const isActive = activeSection === item.id
+            return (
+              <button
+                key={item.id}
+                onClick={() => {
+                  if (item.id === 'models') {
+                    navigate('/models')
+                  } else {
+                    setActiveSection(item.id)
+                  }
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  padding: '10px 16px',
+                  margin: '0 8px',
+                  background: isActive ? 'var(--sand)' : 'transparent',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  color: isActive ? 'var(--fg)' : 'var(--muted)',
+                  fontWeight: isActive ? 500 : 400,
+                  fontSize: '13px',
+                  transition: 'all 0.15s',
+                  textAlign: 'left',
+                  width: 'calc(100% - 16px)',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'var(--bg)'
+                    e.currentTarget.style.color = 'var(--fg)'
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'transparent'
+                    e.currentTarget.style.color = 'var(--muted)'
+                  }
+                }}
+              >
+                <Icon size={16} strokeWidth={1.8} />
+                <span>{item.label}</span>
+              </button>
+            )
+          })}
         </div>
 
-        {/* Scrollable Content */}
+        {/* ── Content area ── */}
         <div style={{
           flex: 1,
-          overflowY: 'auto',
-          padding: '24px 48px 100px',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
         }}>
-          <div style={{ maxWidth: 760 }}>
+          {/* Header */}
+          <div style={{ padding: '32px 48px 0', flexShrink: 0 }}>
+            <h1 style={{
+              fontFamily: 'var(--font-serif)',
+              fontSize: 28,
+              fontWeight: 700,
+              color: 'var(--fg)',
+              marginBottom: 6,
+            }}>
+              {activeSection === 'engine' ? '解析引擎' :
+               activeSection === 'translate' ? '翻译设置' :
+               activeSection === 'reading' ? '阅读体验' :
+               activeSection === 'qa' ? '问答设置' :
+               activeSection === 'data' ? '数据管理' : '关于'}
+            </h1>
+            <p style={{ fontSize: 14, color: 'var(--stone)', lineHeight: 1.5 }}>
+              {activeSection === 'engine' ? '选择默认的 PDF 解析引擎。不同引擎在速度、精度和格式支持上有差异。' :
+               activeSection === 'translate' ? '配置翻译目标语言、风格和预加载行为。' :
+               activeSection === 'reading' ? '调整阅读界面的字体、行高和显示模式。' :
+               activeSection === 'qa' ? '调整 AI 问答的生成参数。' :
+               activeSection === 'data' ? '查看数据占用和清理缓存。' : '应用信息和重置选项。'}
+            </p>
+          </div>
 
-            {/* ── Section 1: 解析引擎 ── */}
-            <section>
+          {/* Scrollable Content */}
+          <div style={{
+            flex: 1,
+            overflowY: 'auto',
+            padding: '24px 48px 100px',
+          }}>
+            <div style={{ maxWidth: 760 }}>
+
+              {/* ── Section: 解析引擎 ── */}
+              {activeSection === 'engine' && (
+                <section>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                 <SectionTitle icon={<Cpu size={18} />} title="解析引擎" />
                 <button
@@ -684,10 +767,10 @@ export default function Settings() {
                 </div>
               )}
             </section>
-
-            <SectionDivider />
+              )}
 
             {/* ── Section 2: 翻译设置 ── */}
+            {activeSection === 'translate' && (
             <section>
               <SectionTitle icon={<Globe size={18} />} title="翻译设置" />
               <SectionDesc>配置翻译目标语言、风格和预加载行为。</SectionDesc>
@@ -748,10 +831,10 @@ export default function Settings() {
                 为术语查询指定独立模型（可选用更快的小模型），不指定则使用默认问答模型。
               </div>
             </section>
-
-            <SectionDivider />
+            )}
 
             {/* ── Section 3: 阅读体验 ── */}
+            {activeSection === 'reading' && (
             <section>
               <SectionTitle icon={<BookOpen size={18} />} title="阅读体验" />
               <SectionDesc>调整阅读界面的字体、行高和显示模式。</SectionDesc>
@@ -798,10 +881,10 @@ export default function Settings() {
                 />
               </SettingRow>
             </section>
-
-            <SectionDivider />
+            )}
 
             {/* ── Section 4: 问答设置 ── */}
+            {activeSection === 'qa' && (
             <section>
               <SectionTitle icon={<MessageSquare size={18} />} title="问答设置" />
               <SectionDesc>调整 AI 问答的生成参数。</SectionDesc>
@@ -827,10 +910,10 @@ export default function Settings() {
                 />
               </SettingRow>
             </section>
-
-            <SectionDivider />
+            )}
 
             {/* ── Section: 数据管理 ── */}
+            {activeSection === 'data' && (
             <section>
               <SectionTitle icon={<Folder size={18} />} title="数据管理" />
               <SectionDesc>查看数据占用和清理缓存。</SectionDesc>
@@ -908,10 +991,10 @@ export default function Settings() {
                 </>
               )}
             </section>
-
-            <SectionDivider />
+            )}
 
             {/* ── Section 5: 关于 ── */}
+            {activeSection === 'about' && (
             <section>
               <SectionTitle icon={<Info size={18} />} title="关于" />
               <SectionDesc>应用信息和重置选项。</SectionDesc>
@@ -992,7 +1075,8 @@ export default function Settings() {
                 </button>
               </div>
             </section>
-
+            )}
+            </div>
           </div>
         </div>
 

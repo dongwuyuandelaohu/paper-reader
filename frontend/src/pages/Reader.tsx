@@ -301,10 +301,14 @@ export default function Reader() {
     try {
       const data = await glossaryApi.lookup(result.word, reader.paper.id)
       setTermPopup({ word: result.word, rect: result.rect, data, loading: false })
+      // 刷新术语表面板（如果已打开）
+      if (notesPanelOpen) {
+        glossaryApi.getPaperGlossary(reader.paper.id).then((res) => setGlossaryList(res.items as any)).catch(() => {})
+      }
     } catch {
       setTermPopup({ word: result.word, rect: result.rect, data: null, loading: false })
     }
-  }, [reader.paper, reader.parsePanelOpen])
+  }, [reader.paper, reader.parsePanelOpen, notesPanelOpen])
 
   const { result: doubleClickResult, clearResult: clearDoubleClick } = useDoubleClick(parseScrollRef, handleDoubleClickWord)
 
@@ -382,11 +386,15 @@ export default function Reader() {
     try {
       const data = await glossaryApi.lookup(text, reader.paper.id)
       setTermPopup({ word: text, rect: { top: rect.top, left: rect.left }, data, loading: false })
+      // 刷新术语表面板（如果已打开）
+      if (notesPanelOpen) {
+        glossaryApi.getPaperGlossary(reader.paper.id).then((res) => setGlossaryList(res.items as any)).catch(() => {})
+      }
     } catch {
       setTermPopup({ word: text, rect: { top: rect.top, left: rect.left }, data: null, loading: false })
     }
     clearSelection()
-  }, [reader.paper, selection, clearSelection])
+  }, [reader.paper, selection, clearSelection, notesPanelOpen])
 
   // ── 加载策略：PDF 优先，同时检测后台解析状态 ──
   useEffect(() => {

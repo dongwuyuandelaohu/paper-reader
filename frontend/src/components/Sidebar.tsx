@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { Library, Cpu, Settings, Plus } from 'lucide-react'
+import { Library, Settings, Plus, X } from 'lucide-react'
 import { usePaperStore } from '../stores/usePaperStore'
 import { useTagStore } from '../stores/useTagStore'
 import { useState } from 'react'
@@ -7,20 +7,16 @@ import { TagCreateModal } from './TagCreateModal'
 
 interface SidebarProps {
   currentPage: 'library' | 'models' | 'settings'
+  activeTagId?: string | null
+  onTagClick?: (tagId: string) => void
 }
 
-export function Sidebar({ currentPage }: SidebarProps) {
+export function Sidebar({ currentPage, activeTagId, onTagClick }: SidebarProps) {
   const navigate = useNavigate()
   const papers = usePaperStore((state) => state.papers)
   const tags = useTagStore((state) => state.tags)
   const createTag = useTagStore((state) => state.createTag)
   const [showTagModal, setShowTagModal] = useState(false)
-
-  const navItems = [
-    { id: 'library' as const, label: '论文库', icon: Library, path: '/' },
-    { id: 'models' as const, label: '模型管理', icon: Cpu, path: '/models' },
-    { id: 'settings' as const, label: '系统设置', icon: Settings, path: '/settings' },
-  ]
 
   const handleNavClick = (path: string) => {
     navigate(path)
@@ -33,6 +29,8 @@ export function Sidebar({ currentPage }: SidebarProps) {
       console.error('Failed to create tag:', error)
     }
   }
+
+  const isSettingsActive = currentPage === 'settings' || currentPage === 'models'
 
   return (
     <>
@@ -85,56 +83,75 @@ export function Sidebar({ currentPage }: SidebarProps) {
           flexDirection: 'column',
           gap: '4px',
         }}>
-          {navItems.map((item) => {
-            const Icon = item.icon
-            const isActive = currentPage === item.id
-            return (
+          <button
+            onClick={() => handleNavClick('/')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              padding: '10px 12px',
+              background: currentPage === 'library' ? 'var(--sand)' : 'transparent',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              color: currentPage === 'library' ? 'var(--fg)' : 'var(--muted)',
+              fontWeight: currentPage === 'library' ? 500 : 400,
+              fontSize: '14px',
+              transition: 'all 0.2s',
+              textAlign: 'left',
+              width: '100%',
+            }}
+            onMouseEnter={(e) => {
+              if (currentPage !== 'library') {
+                e.currentTarget.style.background = 'var(--bg)'
+                e.currentTarget.style.color = 'var(--fg)'
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (currentPage !== 'library') {
+                e.currentTarget.style.background = 'transparent'
+                e.currentTarget.style.color = 'var(--muted)'
+              }
+            }}
+          >
+            <Library size={18} strokeWidth={1.8} />
+            <span>论文库</span>
+            <span style={{
+              marginLeft: 'auto',
+              fontSize: '12px',
+              color: 'var(--stone)',
+            }}>
+              {papers.length}
+            </span>
+          </button>
+
+          {/* Active tag filter indicator */}
+          {activeTagId && (
+            <div style={{
+              margin: '4px 8px 0',
+              padding: '6px 10px',
+              background: 'var(--bg)',
+              borderRadius: '6px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '12px',
+              color: 'var(--muted)',
+            }}>
+              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {tags.find(t => t.id === activeTagId)?.name || '标签筛选'}
+              </span>
               <button
-                key={item.id}
-                onClick={() => handleNavClick(item.path)}
+                onClick={() => onTagClick?.(activeTagId)}
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  padding: '10px 12px',
-                  background: isActive ? 'var(--sand)' : 'transparent',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  color: isActive ? 'var(--fg)' : 'var(--muted)',
-                  fontWeight: isActive ? 500 : 400,
-                  fontSize: '14px',
-                  transition: 'all 0.2s',
-                  textAlign: 'left',
-                  width: '100%',
-                }}
-                onMouseEnter={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.background = 'var(--bg)'
-                    e.currentTarget.style.color = 'var(--fg)'
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.background = 'transparent'
-                    e.currentTarget.style.color = 'var(--muted)'
-                  }
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  padding: '2px', color: 'var(--stone)', display: 'flex',
                 }}
               >
-                <Icon size={18} strokeWidth={1.8} />
-                <span>{item.label}</span>
-                {item.id === 'library' && (
-                  <span style={{
-                    marginLeft: 'auto',
-                    fontSize: '12px',
-                    color: 'var(--stone)',
-                  }}>
-                    {papers.length}
-                  </span>
-                )}
+                <X size={12} />
               </button>
-            )
-          })}
+            </div>
+          )}
         </div>
 
         {/* Tags Section (only on library page) */}
@@ -197,50 +214,56 @@ export function Sidebar({ currentPage }: SidebarProps) {
               overflowY: 'auto',
               flex: 1,
             }}>
-              {tags.map((tag) => (
-                <div
-                  key={tag.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    transition: 'background 0.2s',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'var(--bg)'
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'transparent'
-                  }}
-                >
-                  <div style={{
-                    width: '8px',
-                    height: '8px',
-                    borderRadius: '4px',
-                    background: tag.color,
-                    flexShrink: 0,
-                  }} />
-                  <span style={{
-                    fontSize: '13px',
-                    color: 'var(--fg)',
-                    flex: 1,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}>
-                    {tag.name}
-                  </span>
-                  <span style={{
-                    fontSize: '11px',
-                    color: 'var(--stone)',
-                  }}>
-                    {tag.paper_count || 0}
-                  </span>
-                </div>
-              ))}
+              {tags.map((tag) => {
+                const isActive = activeTagId === tag.id
+                return (
+                  <div
+                    key={tag.id}
+                    onClick={() => onTagClick?.(tag.id)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      cursor: onTagClick ? 'pointer' : 'default',
+                      transition: 'background 0.2s',
+                      background: isActive ? 'var(--sand)' : 'transparent',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isActive) e.currentTarget.style.background = 'var(--bg)'
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isActive) e.currentTarget.style.background = 'transparent'
+                    }}
+                  >
+                    <div style={{
+                      width: '8px',
+                      height: '8px',
+                      borderRadius: '4px',
+                      background: tag.color,
+                      flexShrink: 0,
+                    }} />
+                    <span style={{
+                      fontSize: '13px',
+                      color: isActive ? 'var(--fg)' : 'var(--muted)',
+                      fontWeight: isActive ? 500 : 400,
+                      flex: 1,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}>
+                      {tag.name}
+                    </span>
+                    <span style={{
+                      fontSize: '11px',
+                      color: 'var(--stone)',
+                    }}>
+                      {tag.paper_count || 0}
+                    </span>
+                  </div>
+                )
+              })}
 
               {tags.length === 0 && (
                 <div style={{
@@ -255,6 +278,52 @@ export function Sidebar({ currentPage }: SidebarProps) {
             </div>
           </div>
         )}
+
+        {/* Spacer to push settings to bottom */}
+        {currentPage !== 'library' && <div style={{ flex: 1 }} />}
+
+        {/* Settings button at bottom */}
+        <div style={{
+          padding: '0 12px',
+          borderTop: '1px solid var(--border)',
+          paddingTop: '12px',
+          marginTop: 'auto',
+        }}>
+          <button
+            onClick={() => handleNavClick('/settings')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              padding: '10px 12px',
+              background: isSettingsActive ? 'var(--sand)' : 'transparent',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              color: isSettingsActive ? 'var(--fg)' : 'var(--muted)',
+              fontWeight: isSettingsActive ? 500 : 400,
+              fontSize: '14px',
+              transition: 'all 0.2s',
+              textAlign: 'left',
+              width: '100%',
+            }}
+            onMouseEnter={(e) => {
+              if (!isSettingsActive) {
+                e.currentTarget.style.background = 'var(--bg)'
+                e.currentTarget.style.color = 'var(--fg)'
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isSettingsActive) {
+                e.currentTarget.style.background = 'transparent'
+                e.currentTarget.style.color = 'var(--muted)'
+              }
+            }}
+          >
+            <Settings size={18} strokeWidth={1.8} />
+            <span>设置</span>
+          </button>
+        </div>
       </div>
 
       <TagCreateModal

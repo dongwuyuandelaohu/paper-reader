@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Plus, CheckCircle2, XCircle, Trash2, Pencil, Zap, Globe, MessageSquare, Loader2, AlertTriangle, Eye, EyeOff, ChevronDown } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Plus, CheckCircle2, XCircle, Trash2, Pencil, Zap, Globe, MessageSquare, Loader2, AlertTriangle, Eye, EyeOff, ChevronDown, Cpu, BookOpen, Folder, Info } from 'lucide-react'
 import { Sidebar } from '../components/Sidebar'
 import { Modal } from '../components/Modal'
 import { useSettingsStore } from '../stores/useSettingsStore'
@@ -51,6 +52,7 @@ const emptyForm: FormData = { name: '', api_base_url: '', api_key: '', model_id:
 export default function Models() {
   const { models, loading, fetchModels, createModel, deleteModel, testModel, setDefaultModel, updateModel } = useSettingsStore()
   const showToast = useToastStore((s) => s.showToast)
+  const navigate = useNavigate()
 
   const [showModal, setShowModal] = useState(false)
   const [editingModel, setEditingModel] = useState<AIModel | null>(null)
@@ -209,8 +211,77 @@ export default function Models() {
     <div style={{ display: 'flex', height: '100vh', background: 'var(--bg)' }}>
       <Sidebar currentPage="models" />
 
-      <main style={{ flex: 1, overflow: 'auto', padding: '40px 48px' }}>
-        <div style={{ maxWidth: 900 }}>
+      <main style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+        {/* ── Secondary menu (二级菜单，与 Settings 一致) ── */}
+        <div style={{
+          width: '200px',
+          flexShrink: 0,
+          background: 'var(--surface)',
+          borderRight: '1px solid var(--border)',
+          padding: '24px 0',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '2px',
+        }}>
+          {[
+            { id: 'models', label: '模型管理', icon: Cpu },
+            { id: 'engine', label: '解析引擎', icon: Cpu },
+            { id: 'translate', label: '翻译设置', icon: Globe },
+            { id: 'reading', label: '阅读体验', icon: BookOpen },
+            { id: 'qa', label: '问答设置', icon: MessageSquare },
+            { id: 'data', label: '数据管理', icon: Folder },
+            { id: 'about', label: '关于', icon: Info },
+          ].map((item) => {
+            const Icon = item.icon
+            const isActive = item.id === 'models'
+            return (
+              <button
+                key={item.id}
+                onClick={() => {
+                  if (item.id !== 'models') {
+                    navigate('/settings')
+                  }
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  padding: '10px 16px',
+                  margin: '0 8px',
+                  background: isActive ? 'var(--sand)' : 'transparent',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  color: isActive ? 'var(--fg)' : 'var(--muted)',
+                  fontWeight: isActive ? 500 : 400,
+                  fontSize: '13px',
+                  transition: 'all 0.15s',
+                  textAlign: 'left',
+                  width: 'calc(100% - 16px)',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'var(--bg)'
+                    e.currentTarget.style.color = 'var(--fg)'
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'transparent'
+                    e.currentTarget.style.color = 'var(--muted)'
+                  }
+                }}
+              >
+                <Icon size={16} strokeWidth={1.8} />
+                <span>{item.label}</span>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* ── Content area ── */}
+        <div style={{ flex: 1, overflow: 'auto', padding: '40px 48px' }}>
+          <div style={{ maxWidth: 900 }}>
           {/* Header */}
           <div style={{ marginBottom: 36 }}>
             <h1 style={{
@@ -335,6 +406,7 @@ export default function Models() {
               </div>
             )}
           </div>
+        </div>
         </div>
       </main>
 
