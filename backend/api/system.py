@@ -40,7 +40,7 @@ async def health_check(db: Database = Depends(get_db)):
 
     return {
         "status": "ok",
-        "version": "0.1.2",
+        "version": "0.1.3",
         "paper_count": paper_count,
         "engines": engines_info,
     }

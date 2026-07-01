@@ -1028,7 +1028,7 @@ export default function Settings() {
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--fg)', marginBottom: 4 }}>PaperLens</div>
-                  <div style={{ fontSize: 12, color: 'var(--stone)', marginBottom: 4 }}>版本 1.0.0</div>
+                  <div style={{ fontSize: 12, color: 'var(--stone)', marginBottom: 4 }}>版本 0.1.3</div>
                   <div style={{ fontSize: 12, color: 'var(--silver)', lineHeight: 1.5 }}>
                     基于 React + FastAPI 构建的学术论文阅读助手
                   </div>
