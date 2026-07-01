@@ -123,6 +123,11 @@ class MarkerEngine:
             use_shell = marker_cmd.lower().endswith(".bat")
 
             # 使用 Popen 逐行读取输出，支持实时日志推送
+            # Windows 上用 CREATE_NEW_PROCESS_GROUP，中止时可以杀整个进程树
+            creationflags = 0
+            if sys.platform == "win32":
+                creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
+
             proc = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
@@ -133,6 +138,7 @@ class MarkerEngine:
                 encoding='utf-8',
                 errors='replace',
                 env=env,
+                creationflags=creationflags,
             )
 
             # 注册进程对象，用于中止时 kill

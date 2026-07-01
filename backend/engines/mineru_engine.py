@@ -117,6 +117,11 @@ class MinerUEngine:
             env["MINERU_MODEL_CACHE_DIR"] = str(cache_dir / "mineru-models")
             logger.info(f"[MINERU] HF_HOME: {env['HF_HOME']}")
 
+            # Windows 上用 CREATE_NEW_PROCESS_GROUP，中止时可以杀整个进程树
+            creationflags = 0
+            if sys.platform == "win32":
+                creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
+
             # 使用 Popen 逐行读取输出，支持实时日志推送
             proc = subprocess.Popen(
                 cmd,
@@ -128,6 +133,7 @@ class MinerUEngine:
                 encoding='utf-8',
                 errors='replace',
                 env=env,
+                creationflags=creationflags,
             )
 
             # 注册进程对象，用于中止时 kill

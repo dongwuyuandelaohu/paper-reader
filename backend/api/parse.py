@@ -447,13 +447,25 @@ async def abort_parse(paper_id: str):
     aborted = False
     engine_name = None
 
-    # 1. Kill subprocess if exists
+    # 1. Kill subprocess if exists（杀掉整个进程树，包括 .bat 启动的子进程）
     with _active_processes_lock:
         proc = _active_processes.pop(paper_id, None)
     if proc:
         try:
-            proc.kill()
-            logger.info(f"[ABORT] Killed subprocess for paper {paper_id}")
+            import sys as _sys
+            if _sys.platform == "win32":
+                # Windows: taskkill /F /T /PID 杀掉整个进程树
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                    capture_output=True, timeout=10,
+                )
+                logger.info(f"[ABORT] taskkill /T /PID {proc.pid} for paper {paper_id}")
+            else:
+                # Unix: 杀掉整个进程组
+                import signal as _signal
+                import os as _os
+                _os.killpg(_os.getpgid(proc.pid), _signal.SIGTERM)
+                logger.info(f"[ABORT] killpg for paper {paper_id}")
         except Exception as e:
             logger.warning(f"[ABORT] Failed to kill subprocess: {e}")
         aborted = True
