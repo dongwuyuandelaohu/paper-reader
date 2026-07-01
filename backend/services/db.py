@@ -221,7 +221,27 @@ class Database:
             raise
     
     async def _run_migrations(self):
-        """执行数据库迁移（仅开发模式）"""
+        """执行数据库迁移"""
+        # 1. 安全的增量列迁移（生产环境和开发环境都执行）
+        safe_columns = [
+            ("models", "supports_vision", "INTEGER DEFAULT 0"),
+            ("messages", "images", "TEXT"),
+            ("messages", "thinking", "TEXT"),
+            ("notes", "engine", "TEXT"),
+            ("highlights", "engine", "TEXT"),
+        ]
+        for table, column, col_type in safe_columns:
+            try:
+                await self.conn.execute(f"SELECT {column} FROM {table} LIMIT 1")
+            except (sqlite3.OperationalError, Exception):
+                try:
+                    await self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+                    await self.conn.commit()
+                    logger.info(f"[DB] Added column {table}.{column}")
+                except Exception:
+                    pass
+
+        # 2. SQL 迁移文件（仅开发模式）
         migrations_dir = get_base_dir() / "database" / "migrations"
         
         if not migrations_dir.exists():
@@ -253,24 +273,6 @@ class Database:
                     sql = f.read()
                 await self.conn.executescript(sql)
                 await self.conn.commit()
-        
-        # 安全的增量列迁移
-        safe_columns = [
-            ("models", "supports_vision", "INTEGER DEFAULT 0"),
-            ("messages", "images", "TEXT"),
-            ("messages", "thinking", "TEXT"),
-            ("notes", "engine", "TEXT"),
-            ("highlights", "engine", "TEXT"),
-        ]
-        for table, column, col_type in safe_columns:
-            try:
-                await self.conn.execute(f"SELECT {column} FROM {table} LIMIT 1")
-            except (sqlite3.OperationalError, Exception):
-                try:
-                    await self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
-                    await self.conn.commit()
-                except Exception:
-                    pass
     
     async def close(self):
         """关闭数据库连接"""
