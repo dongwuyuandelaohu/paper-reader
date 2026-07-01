@@ -32,6 +32,13 @@ function _reconnectParseSSE(paperId: string, engine: string) {
           parsePagesDone: data.pages_done || 0,
           parseTotalPages: data.total_pages || 0,
         })
+      } else if (data.type === 'log') {
+        // 追加日志行
+        const current = useReaderStore.getState().parseLogs || []
+        const newLogs = [...current, data.message || '']
+        // 限制最多 500 行
+        if (newLogs.length > 500) newLogs.splice(0, newLogs.length - 500)
+        useReaderStore.setState({ parseLogs: newLogs })
       } else if (data.type === 'completed') {
         useReaderStore.setState({ parsing: false, parseProgress: 1, currentEngine: engine })
         await useReaderStore.getState().loadPages(engine)
@@ -92,6 +99,7 @@ interface ReaderStore {
   parseProgress: number
   parsePagesDone: number
   parseTotalPages: number
+  parseLogs: string[]
   selectedEngine: string
   currentEngine: string | null
 
@@ -102,6 +110,7 @@ interface ReaderStore {
   translateCurrentPage: (modelId?: string, pageNumber?: number, forceRetranslate?: boolean) => Promise<void>
   translateChunk: (paperId: string, pageNumber: number, _markdown: string, modelId?: string) => Promise<string>
   triggerParse: (paperId: string, engine: string) => Promise<void>
+  abortParse: (paperId: string) => Promise<void>
   switchEngine: (engine: string) => Promise<void>
   toggleToc: () => void
   toggleParsePanel: () => void
@@ -130,6 +139,7 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
   parseProgress: 0,
   parsePagesDone: 0,
   parseTotalPages: 0,
+  parseLogs: [],
   selectedEngine: (() => { try { return localStorage.getItem('paperlens:selectedEngine') || 'pymupdf' } catch { return 'pymupdf' } })(),
   currentEngine: null,
 
@@ -154,6 +164,7 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
           parseProgress: 0,
           parsePagesDone: 0,
           parseTotalPages: 0,
+          parseLogs: [],
           parsing: false,
           currentEngine: null,
           currentPage: 1,
@@ -451,7 +462,7 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
   },
 
   triggerParse: async (paperId, engine) => {
-    set({ parsing: true, parseProgress: 0, parsePanelOpen: true, selectedEngine: engine })
+    set({ parsing: true, parseProgress: 0, parseLogs: [], parsePanelOpen: true, selectedEngine: engine, currentEngine: engine })
     
     try {
       const result = await parse.trigger(paperId, engine)
@@ -466,6 +477,23 @@ export const useReaderStore = create<ReaderStore>((set, get) => ({
       
       // 使用统一的 SSE 连接管理（支持重连）
       _reconnectParseSSE(paperId, engine)
+    } catch {
+      set({ parsing: false })
+    }
+  },
+
+  abortParse: async (paperId) => {
+    try {
+      await parse.abort(paperId)
+      // 关闭 SSE
+      if (_parseEventSource) {
+        _parseEventSource.close()
+        _parseEventSource = null
+      }
+      set({ parsing: false, parseProgress: 0, parseLogs: [] })
+      // 刷新状态
+      const status = await parse.status(paperId)
+      set({ parseStatus: status })
     } catch {
       set({ parsing: false })
     }

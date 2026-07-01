@@ -1334,6 +1334,7 @@ export default function Reader() {
                   progress={reader.parseProgress}
                   pagesDone={reader.parsePagesDone}
                   totalPages={reader.parseTotalPages || totalPages}
+                  logs={reader.parseLogs}
                 />
               ) : reader.parseStatus?.parse_status === 'failed' ? (
                 /* 解析失败状态 */
@@ -1749,7 +1750,9 @@ export default function Reader() {
         selectedEngine={reader.selectedEngine}
         onSelect={reader.setSelectedEngine}
         onStartParse={handleStartParse}
+        onAbortParse={() => { if (reader.paper) reader.abortParse(reader.paper.id) }}
         parsing={reader.parsing}
+        parsingEngine={reader.currentEngine || undefined}
         cachedEngines={reader.parseStatus?.cached_engines}
         totalPages={reader.paper?.total_pages}
         onRecheck={handleRecheckEngines}

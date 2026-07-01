@@ -14,6 +14,7 @@ import json
 import uuid
 import logging
 import sqlite3
+import subprocess
 import threading
 import asyncio
 from datetime import datetime
@@ -39,6 +40,11 @@ class ParseRequest(BaseModel):
 
 # ── Active parse threads tracking ──
 _active_threads: dict[str, threading.Thread] = {}
+
+# ── Active subprocess tracking (for abort/kill) ──
+# key: paper_id, value: subprocess.Popen
+_active_processes: dict[str, subprocess.Popen] = {}
+_active_processes_lock = threading.Lock()
 
 # ── SSE progress queues ──
 # key: paper_id, value: asyncio.Queue
@@ -235,7 +241,24 @@ def _run_parse_in_thread(paper_id: str, job_id: str, file_path: str, total_pages
 
     try:
         logger.info(f"[{thread_name}] Calling engine.parse_all()...")
-        results = engine.parse_all(file_path, paper_id=paper_id)
+
+        # 日志回调：将引擎 stdout 推送到前端
+        def _log_callback(line: str):
+            push_progress(paper_id, {
+                "type": "log",
+                "message": line,
+            })
+
+        # 进程注册回调：让引擎注册 Popen 对象，用于中止时 kill
+        def _register_process(proc):
+            with _active_processes_lock:
+                _active_processes[paper_id] = proc
+
+        results = engine.parse_all(
+            file_path, paper_id=paper_id,
+            log_callback=_log_callback,
+            register_process=_register_process,
+        )
         logger.info(f"[{thread_name}] Engine returned {len(results)} page results")
 
         for i, result in enumerate(results):
@@ -338,6 +361,9 @@ def _run_parse_in_thread(paper_id: str, job_id: str, file_path: str, total_pages
         conn.close()
         thread_key = f"{paper_id}:{engine_name}"
         _active_threads.pop(thread_key, None)
+        # 清理进程跟踪
+        with _active_processes_lock:
+            _active_processes.pop(paper_id, None)
         logger.info(f"[{thread_name}] Thread finished, connection closed")
 
 
@@ -413,6 +439,62 @@ async def get_parse_status(
         } if job else None,
         "page_statuses": page_statuses,
     }
+
+
+@router.post("/{paper_id}/parse/abort")
+async def abort_parse(paper_id: str):
+    """中止正在进行的解析任务"""
+    aborted = False
+    engine_name = None
+
+    # 1. Kill subprocess if exists
+    with _active_processes_lock:
+        proc = _active_processes.pop(paper_id, None)
+    if proc:
+        try:
+            proc.kill()
+            logger.info(f"[ABORT] Killed subprocess for paper {paper_id}")
+        except Exception as e:
+            logger.warning(f"[ABORT] Failed to kill subprocess: {e}")
+        aborted = True
+
+    # 2. Remove thread from active list
+    for key, thread in list(_active_threads.items()):
+        if key.startswith(paper_id) and thread.is_alive():
+            parts = key.split(":", 1)
+            engine_name = parts[1] if len(parts) > 1 else None
+            _active_threads.pop(key, None)
+            aborted = True
+            logger.info(f"[ABORT] Removed parse thread: {key}")
+            break
+
+    if aborted:
+        # 推送中止事件到前端
+        push_progress(paper_id, {
+            "type": "error",
+            "engine": engine_name,
+            "error": "用户已取消解析",
+        })
+        # 更新数据库中的 job 状态
+        try:
+            db_path = str(get_data_dir() / "data.db")
+            conn = sqlite3.connect(db_path, timeout=10)
+            conn.execute(
+                "UPDATE parse_jobs SET status='failed', error_message=? WHERE paper_id=? AND status='parsing'",
+                ("用户已取消解析", paper_id)
+            )
+            conn.execute(
+                "UPDATE papers SET parse_status='failed' WHERE id=? AND parse_status='parsing'",
+                (paper_id,)
+            )
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.error(f"[ABORT] DB update failed: {e}")
+
+        return {"status": "aborted", "engine": engine_name}
+    else:
+        return {"status": "not_running"}
 
 
 @router.get("/{paper_id}/parse/stream")

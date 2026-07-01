@@ -1,0 +1,151 @@
+2026-07-01 15:38:38,800 - paperlens.parse - INFO - [MINERU] 使用独立打包的引擎: C:\Users\zhanke\.paperlens\engines\mineru-engine\mineru-engine.bat
+2026-07-01 15:38:38,800 - paperlens.parse - INFO - [MINERU] Command: C:\Users\zhanke\.paperlens\engines\mineru-engine\mineru-engine.bat
+2026-07-01 15:38:38,800 - paperlens.parse - INFO - [MINERU] Input: C:\Users\zhanke\AppData\Roaming\PaperLens\data\papers\b14ceef7-f3e3-4ac5-9a3f-2d6017677403.pdf
+2026-07-01 15:38:38,800 - paperlens.parse - INFO - [MINERU] Output: C:\Users\zhanke\AppData\Roaming\PaperLens\data\images\b14ceef7-f3e3-4ac5-9a3f-2d6017677403\mineru\mineru_temp
+2026-07-01 15:38:38,800 - paperlens.parse - INFO - [MINERU] Running: C:\Users\zhanke\.paperlens\engines\mineru-engine\mineru-engine.bat -p C:\Users\zhanke\AppData\Roaming\PaperLens\data\papers\b14ceef7-f3e3-4ac5-9a3f-2d6017677403.pdf -o C:\Users\zhanke\AppData\Roaming\PaperLens\data\images\b14ceef7-f3e3-4ac5-9a3f-2d6017677403\mineru\mineru_temp -m auto
+INFO:     127.0.0.1:53803 - "GET /api/v1/parse/b14ceef7-f3e3-4ac5-9a3f-2d6017677403/parse/stream HTTP/1.1" 200 OK
+2026-07-01 15:38:41,686 - paperlens.parse - INFO - [MINERU] [MinerU] CUDA not available, using pipeline backend for CPU mode
+2026-07-01 15:38:41,686 - paperlens.parse - INFO - [MINERU] [MinerU] Engine dir:      C:\Users\zhanke\.paperlens\engines\mineru-engine\
+2026-07-01 15:38:41,687 - paperlens.parse - INFO - [MINERU] [MinerU] HF_HOME:         C:\Users\zhanke\.cache\paperlens\huggingface
+2026-07-01 15:38:41,687 - paperlens.parse - INFO - [MINERU] [MinerU] MinerU cache:     C:\Users\zhanke\.cache\paperlens\mineru-models
+2026-07-01 15:38:41,687 - paperlens.parse - INFO - [MINERU] [MinerU] Model source:    modelscope
+2026-07-01 15:38:41,687 - paperlens.parse - INFO - [MINERU] [MinerU] HF endpoint:     https://hf-mirror.com
+2026-07-01 15:38:46,837 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:38:46.837 | INFO     | mineru.cli.client:run_orchestrated_cli:877 - Started local mineru-api at http://127.0.0.1:59538
+2026-07-01 15:38:50,344 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:38:50.344 | INFO     | __main__:create_app:233 - Request concurrency limited to 3
+2026-07-01 15:38:50,494 - paperlens.parse - INFO - [MINERU] INFO:     Started server process [18344]
+2026-07-01 15:38:50,494 - paperlens.parse - INFO - [MINERU] INFO:     Waiting for application startup.
+2026-07-01 15:38:50,495 - paperlens.parse - INFO - [MINERU] INFO:     Application startup complete.
+2026-07-01 15:38:50,495 - paperlens.parse - INFO - [MINERU] INFO:     Uvicorn running on http://127.0.0.1:59538 (Press CTRL+C to quit)
+2026-07-01 15:38:50,970 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:38:50.970 | INFO     | mineru.cli.client:run_planned_task:773 - Submitting batch 1/1 | 1 document, 2 pages in this batch | 2 pages total | task#1 [b14ceef7-f3e3-4ac5-9a3f-2d6017677403]
+2026-07-01 15:38:58,482 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:38:58.482 | INFO     | mineru.backend.pipeline.pipeline_analyze:doc_analyze_streaming:182 - Pipeline processing-window multi-file run. doc_count=1, total_pages=2, window_size=64, total_batches=1
+2026-07-01 15:39:02,132 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:02.132 | INFO     | mineru.backend.pipeline.pipeline_analyze:doc_analyze_streaming:234 - Pipeline processing window batch 1/1: 2/2 pages, batch_pages=2, doc_slices=doc0:1-2
+2026-07-01 15:39:02,134 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:02.134 | INFO     | mineru.backend.pipeline.pipeline_analyze:batch_image_analyze:327 - GPU Memory: 1 GB, Batch Ratio: 1.
+2026-07-01 15:39:02,135 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:02.135 | INFO     | mineru.backend.pipeline.model_init:__init__:214 - DocAnalysis init, this may take some times......
+2026-07-01 15:39:03,415 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:03,415 - modelscope - INFO - Creating symbolic link [C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0].
+2026-07-01 15:39:03,432 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:03,432 - modelscope - WARNING - Failed to create symbolic link C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0 for C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1___0.
+2026-07-01 15:39:05,152 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:05,152 - modelscope - INFO - Creating symbolic link [C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0].
+2026-07-01 15:39:05,153 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:05,153 - modelscope - WARNING - Failed to create symbolic link C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0 for C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1___0.
+2026-07-01 15:39:06,637 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:06,637 - modelscope - INFO - Creating symbolic link [C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0].
+2026-07-01 15:39:06,638 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:06,638 - modelscope - WARNING - Failed to create symbolic link C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0 for C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1___0.
+2026-07-01 15:39:07,519 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:07,518 - modelscope - INFO - Creating symbolic link [C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0].
+2026-07-01 15:39:07,519 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:07,519 - modelscope - WARNING - Failed to create symbolic link C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0 for C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1___0.
+2026-07-01 15:39:09,110 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:09,110 - modelscope - INFO - Creating symbolic link [C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0].
+2026-07-01 15:39:09,110 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:09,110 - modelscope - WARNING - Failed to create symbolic link C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0 for C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1___0.
+2026-07-01 15:39:09,970 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:09,970 - modelscope - INFO - Creating symbolic link [C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0].
+2026-07-01 15:39:09,970 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:09,970 - modelscope - WARNING - Failed to create symbolic link C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0 for C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1___0.
+2026-07-01 15:39:11,457 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:11,457 - modelscope - INFO - Creating symbolic link [C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0].
+2026-07-01 15:39:11,458 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:11,458 - modelscope - WARNING - Failed to create symbolic link C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0 for C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1___0.
+2026-07-01 15:39:12,447 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:12,446 - modelscope - INFO - Creating symbolic link [C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0].
+2026-07-01 15:39:12,447 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:12,447 - modelscope - WARNING - Failed to create symbolic link C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0 for C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1___0.
+2026-07-01 15:39:14,723 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:14,722 - modelscope - INFO - Creating symbolic link [C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0].
+2026-07-01 15:39:14,723 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:14,723 - modelscope - WARNING - Failed to create symbolic link C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0 for C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1___0.
+2026-07-01 15:39:15,712 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:15,711 - modelscope - INFO - Creating symbolic link [C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0].
+2026-07-01 15:39:15,712 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:15,712 - modelscope - WARNING - Failed to create symbolic link C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0 for C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1___0.
+2026-07-01 15:39:16,596 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:16,596 - modelscope - INFO - Creating symbolic link [C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0].
+2026-07-01 15:39:16,596 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:16,596 - modelscope - WARNING - Failed to create symbolic link C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0 for C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1___0.
+2026-07-01 15:39:17,285 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:17.285 | INFO     | mineru.backend.pipeline.model_init:__init__:266 - DocAnalysis init done!
+2026-07-01 15:39:17,285 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:17.285 | INFO     | mineru.backend.pipeline.pipeline_analyze:custom_model_init:82 - model init cost: 15.150774478912354
+2026-07-01 15:39:17,299 - paperlens.parse - INFO - [MINERU] Start MinerU FastAPI Service: http://127.0.0.1:59538
+2026-07-01 15:39:17,299 - paperlens.parse - INFO - [MINERU] API documentation: http://127.0.0.1:59538/docs
+2026-07-01 15:39:17,300 - paperlens.parse - INFO - [MINERU] Downloading Model from https://www.modelscope.cn to directory: C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0
+2026-07-01 15:39:17,300 - paperlens.parse - INFO - [MINERU] Downloading Model from https://www.modelscope.cn to directory: C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0
+2026-07-01 15:39:17,300 - paperlens.parse - INFO - [MINERU] Downloading Model from https://www.modelscope.cn to directory: C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0
+2026-07-01 15:39:17,300 - paperlens.parse - INFO - [MINERU] Downloading Model from https://www.modelscope.cn to directory: C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0
+2026-07-01 15:39:17,300 - paperlens.parse - INFO - [MINERU] Downloading Model from https://www.modelscope.cn to directory: C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0
+2026-07-01 15:39:17,300 - paperlens.parse - INFO - [MINERU] Downloading Model from https://www.modelscope.cn to directory: C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0
+2026-07-01 15:39:17,302 - paperlens.parse - INFO - [MINERU] Downloading Model from https://www.modelscope.cn to directory: C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0
+2026-07-01 15:39:17,302 - paperlens.parse - INFO - [MINERU] Downloading Model from https://www.modelscope.cn to directory: C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0
+2026-07-01 15:39:17,302 - paperlens.parse - INFO - [MINERU] Downloading Model from https://www.modelscope.cn to directory: C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0
+2026-07-01 15:39:17,303 - paperlens.parse - INFO - [MINERU] Downloading Model from https://www.modelscope.cn to directory: C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0
+2026-07-01 15:39:17,303 - paperlens.parse - INFO - [MINERU] Downloading Model from https://www.modelscope.cn to directory: C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0
+2026-07-01 15:39:18,588 - paperlens.parse - INFO - [MINERU] Layout Predict:   0%|          | 0/2 [00:00<?, ?it/s]
+2026-07-01 15:39:19,458 - paperlens.parse - INFO - [MINERU] Layout Predict:  50%|����������     | 1/2 [00:01<00:01,  1.29s/it]
+2026-07-01 15:39:19,458 - paperlens.parse - INFO - [MINERU] Layout Predict: 100%|��������������������| 2/2 [00:02<00:00,  1.04s/it]
+2026-07-01 15:39:19,458 - paperlens.parse - INFO - [MINERU] Layout Predict: 100%|��������������������| 2/2 [00:02<00:00,  1.08s/it]
+2026-07-01 15:39:20,151 - paperlens.parse - INFO - [MINERU] Table-ocr det:   0%|          | 0/2 [00:00<?, ?it/s]
+2026-07-01 15:39:20,310 - paperlens.parse - INFO - [MINERU] Table-ocr det:  50%|����������     | 1/2 [00:00<00:00,  5.06it/s]
+2026-07-01 15:39:20,311 - paperlens.parse - INFO - [MINERU] Table-ocr det: 100%|��������������������| 2/2 [00:00<00:00,  5.70it/s]
+2026-07-01 15:39:20,311 - paperlens.parse - INFO - [MINERU] Table-ocr det: 100%|��������������������| 2/2 [00:00<00:00,  5.59it/s]
+2026-07-01 15:39:21,261 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:21,261 - modelscope - INFO - Creating symbolic link [C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0].
+2026-07-01 15:39:21,261 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:21,261 - modelscope - WARNING - Failed to create symbolic link C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0 for C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1___0.
+2026-07-01 15:39:22,139 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:22,139 - modelscope - INFO - Creating symbolic link [C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0].
+2026-07-01 15:39:22,140 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:22,139 - modelscope - WARNING - Failed to create symbolic link C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0 for C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1___0.
+2026-07-01 15:39:22,717 - paperlens.parse - INFO - [MINERU] Downloading Model from https://www.modelscope.cn to directory: C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0
+2026-07-01 15:39:22,718 - paperlens.parse - INFO - [MINERU] Downloading Model from https://www.modelscope.cn to directory: C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0
+2026-07-01 15:39:22,963 - paperlens.parse - INFO - [MINERU] Table-ocr rec ch:   0%|          | 0/36 [00:00<?, ?it/s]
+2026-07-01 15:39:23,190 - paperlens.parse - INFO - [MINERU] Table-ocr rec ch:  17%|����        | 6/36 [00:00<00:01, 24.45it/s]
+2026-07-01 15:39:23,416 - paperlens.parse - INFO - [MINERU] Table-ocr rec ch:  33%|��������      | 12/36 [00:00<00:00, 25.52it/s]
+2026-07-01 15:39:24,275 - paperlens.parse - INFO - [MINERU] Table-ocr rec ch:  50%|����������     | 18/36 [00:00<00:00, 26.00it/s]
+2026-07-01 15:39:25,481 - paperlens.parse - INFO - [MINERU] Table-ocr rec ch:  67%|��������������   | 24/36 [00:01<00:00, 12.53it/s]
+2026-07-01 15:39:27,279 - paperlens.parse - INFO - [MINERU] Table-ocr rec ch:  83%|������������������ | 30/36 [00:02<00:00,  8.10it/s]
+2026-07-01 15:39:27,279 - paperlens.parse - INFO - [MINERU] Table-ocr rec ch: 100%|��������������������| 36/36 [00:04<00:00,  5.45it/s]
+2026-07-01 15:39:27,280 - paperlens.parse - INFO - [MINERU] Table-ocr rec ch: 100%|��������������������| 36/36 [00:04<00:00,  7.89it/s]
+2026-07-01 15:39:27,538 - paperlens.parse - INFO - [MINERU] Table-wireless Predict:   0%|          | 0/2 [00:00<?, ?it/s]
+2026-07-01 15:39:27,538 - paperlens.parse - INFO - [MINERU] Table-wireless Predict: 100%|��������������������| 2/2 [00:00<00:00,  7.77it/s]
+2026-07-01 15:39:27,538 - paperlens.parse - INFO - [MINERU] Table-wireless Predict: 100%|��������������������| 2/2 [00:00<00:00,  7.77it/s]
+2026-07-01 15:39:28,400 - paperlens.parse - INFO - [MINERU] Table-wired Predict:   0%|          | 0/2 [00:00<?, ?it/s]2026-07-01 15:39:28,400 - modelscope - INFO - Creating symbolic link [C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0].
+2026-07-01 15:39:28,400 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:28,400 - modelscope - WARNING - Failed to create symbolic link C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0 for C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1___0.
+2026-07-01 15:39:30,239 - paperlens.parse - INFO - [MINERU] Table-wired Predict:  50%|����������     | 1/2 [00:01<00:01,  1.79s/it]
+2026-07-01 15:39:30,239 - paperlens.parse - INFO - [MINERU] Table-wired Predict: 100%|��������������������| 2/2 [00:02<00:00,  1.27s/it]
+2026-07-01 15:39:30,240 - paperlens.parse - INFO - [MINERU] Table-wired Predict: 100%|��������������������| 2/2 [00:02<00:00,  1.35s/it]
+2026-07-01 15:39:32,935 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:32,935 - modelscope - INFO - Creating symbolic link [C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0].
+2026-07-01 15:39:32,936 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:32,936 - modelscope - WARNING - Failed to create symbolic link C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0 for C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1___0.
+2026-07-01 15:39:33,880 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:33,879 - modelscope - INFO - Creating symbolic link [C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0].
+2026-07-01 15:39:33,880 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:33,880 - modelscope - WARNING - Failed to create symbolic link C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0 for C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1___0.
+2026-07-01 15:39:34,442 - paperlens.parse - INFO - [MINERU] Downloading Model from https://www.modelscope.cn to directory: C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0
+2026-07-01 15:39:34,442 - paperlens.parse - INFO - [MINERU] Downloading Model from https://www.modelscope.cn to directory: C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0
+2026-07-01 15:39:34,442 - paperlens.parse - INFO - [MINERU] Downloading Model from https://www.modelscope.cn to directory: C:\Users\zhanke\.cache\modelscope\hub\models\OpenDataLab\PDF-Extract-Kit-1.0
+2026-07-01 15:39:34,505 - paperlens.parse - INFO - [MINERU] OCR-det ch:   0%|          | 0/1 [00:00<?, ?it/s]
+2026-07-01 15:39:34,505 - paperlens.parse - INFO - [MINERU] OCR-det ch: 100%|��������������������| 1/1 [00:00<00:00, 16.07it/s]
+2026-07-01 15:39:34,653 - paperlens.parse - INFO - [MINERU] Seal Predict: 0it [00:00, ?it/s]
+2026-07-01 15:39:34,653 - paperlens.parse - INFO - [MINERU] Seal Predict: 0it [00:00, ?it/s]
+2026-07-01 15:39:34,883 - paperlens.parse - INFO - [MINERU] Processing pages:   0%|          | 0/2 [00:00<?, ?it/s]
+2026-07-01 15:39:34,884 - paperlens.parse - INFO - [MINERU] Processing pages: 100%|��������������������| 2/2 [00:00<00:00, 21.22it/s]
+2026-07-01 15:39:35,959 - paperlens.parse - INFO - [MINERU] 2026-07-01 15:39:35.959 | INFO     | mineru.cli.client:run_planned_task:809 - Completed batch 1/1 | Processed 2/2 pages | 1 of 1 batch finished | task#1 [b14ceef7-f3e3-4ac5-9a3f-2d6017677403]
+2026-07-01 15:39:46,627 - paperlens.parse - INFO - [MINERU] Success, 98 lines of output
+2026-07-01 15:39:46,627 - paperlens.parse - INFO - [MINERU] Output dir: C:\Users\zhanke\AppData\Roaming\PaperLens\data\images\b14ceef7-f3e3-4ac5-9a3f-2d6017677403\mineru\mineru_temp\b14ceef7-f3e3-4ac5-9a3f-2d6017677403
+2026-07-01 15:39:46,627 - paperlens.parse - INFO - [MINERU] Files: [WindowsPath('C:/Users/zhanke/AppData/Roaming/PaperLens/data/images/b14ceef7-f3e3-4ac5-9a3f-2d6017677403/mineru/mineru_temp/b14ceef7-f3e3-4ac5-9a3f-2d6017677403/auto')]
+2026-07-01 15:39:46,628 - paperlens.parse - INFO - [MINERU] Reading: C:\Users\zhanke\AppData\Roaming\PaperLens\data\images\b14ceef7-f3e3-4ac5-9a3f-2d6017677403\mineru\mineru_temp\b14ceef7-f3e3-4ac5-9a3f-2d6017677403\auto\b14ceef7-f3e3-4ac5-9a3f-2d6017677403_content_list.json
+2026-07-01 15:39:46,629 - paperlens.parse - INFO - [MINERU] Content list: 2 blocks
+2026-07-01 15:39:46,655 - paperlens.parse - INFO - [MINERU] Copied 3 images
+2026-07-01 15:39:46,657 - paperlens.parse - INFO - [MINERU] Built 2 pages
+2026-07-01 15:39:46,660 - paperlens.parse - INFO - [parse-mineru-b14ceef7] Engine returned 2 page results
+2026-07-01 15:39:46,670 - paperlens.parse - INFO - [parse-mineru-b14ceef7] Page 1/2 done (mineru)
+2026-07-01 15:39:46,679 - paperlens.parse - INFO - [parse-mineru-b14ceef7] Page 2/2 done (mineru)
+2026-07-01 15:39:46,684 - paperlens.parse - INFO - [parse-mineru-b14ceef7] === Completed: mineru (2 pages) ===
+2026-07-01 15:39:46,685 - paperlens.parse - INFO - [parse-mineru-b14ceef7] Thread finished, connection closed
+
+
+2026-07-01 15:40:48,325 - paperlens.parse - INFO - [MARKER] 使用独立打包的引擎: C:\Users\zhanke\.paperlens\engines\marker-engine\marker-engine.bat
+2026-07-01 15:40:48,325 - paperlens.parse - INFO - [MARKER] Command: C:\Users\zhanke\.paperlens\engines\marker-engine\marker-engine.bat C:\Users\zhanke\AppData\Roaming\PaperLens\data\papers\b14ceef7-f3e3-4ac5-9a3f-2d6017677403.pdf --output_dir C:\Users\zhanke\AppData\Roaming\PaperLens\data\images\b14ceef7-f3e3-4ac5-9a3f-2d6017677403\marker\marker_temp --output_format markdown
+2026-07-01 15:40:48,349 - paperlens.parse - INFO - [MARKER] [Marker] Engine dir:    C:\Users\zhanke\.paperlens\engines\marker-engine\
+2026-07-01 15:40:48,351 - paperlens.parse - INFO - [MARKER] [Marker] HF_HOME:       \huggingface
+2026-07-01 15:40:48,351 - paperlens.parse - INFO - [MARKER] [Marker] DATALAB cache: C:\Users\zhanke\.cache\paperlens\datalab-models
+2026-07-01 15:40:48,351 - paperlens.parse - INFO - [MARKER] [Marker] HF_ENDPOINT:   https://hf-mirror.com
+INFO:     127.0.0.1:58718 - "GET /api/v1/highlights/b14ceef7-f3e3-4ac5-9a3f-2d6017677403?engine=marker HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64619 - "GET /api/v1/parse/b14ceef7-f3e3-4ac5-9a3f-2d6017677403/parse/stream HTTP/1.1" 200 OK
+2026-07-01 15:41:36,871 - watchfiles.main - INFO - 1 change detected
+2026-07-01 15:41:40,104 - watchfiles.main - INFO - 1 change detected
+2026-07-01 15:41:43,833 - paperlens.parse - INFO - [MARKER] Recognizing Layout:   0%|          | 0/2 [00:00<?, ?it/s]
+2026-07-01 15:41:43,961 - paperlens.parse - INFO - [MARKER] Recognizing Layout:  50%|����������     | 1/2 [00:38<00:38, 38.38s/it]
+2026-07-01 15:41:43,961 - paperlens.parse - INFO - [MARKER] Recognizing Layout: 100%|��������������������| 2/2 [00:38<00:00, 15.89s/it]
+2026-07-01 15:41:43,962 - paperlens.parse - INFO - [MARKER] Recognizing Layout: 100%|��������������������| 2/2 [00:38<00:00, 19.26s/it]
+2026-07-01 15:41:44,273 - paperlens.parse - INFO - [MARKER] Running OCR Error Detection:   0%|          | 0/1 [00:00<?, ?it/s]
+2026-07-01 15:41:44,273 - paperlens.parse - INFO - [MARKER] Running OCR Error Detection: 100%|��������������������| 1/1 [00:00<00:00,  3.41it/s]
+2026-07-01 15:41:44,274 - paperlens.parse - INFO - [MARKER] Running OCR Error Detection: 100%|��������������������| 1/1 [00:00<00:00,  3.40it/s]
+2026-07-01 15:41:44,281 - paperlens.parse - INFO - [MARKER] Detecting bboxes: 0it [00:00, ?it/s]
+2026-07-01 15:41:44,281 - paperlens.parse - INFO - [MARKER] Detecting bboxes: 0it [00:00, ?it/s]
+2026-07-01 15:41:45,989 - paperlens.parse - INFO - [MARKER] Recognizing tables:   0%|          | 0/1 [00:00<?, ?it/s]
+2026-07-01 15:41:45,989 - paperlens.parse - INFO - [MARKER] Recognizing tables: 100%|��������������������| 1/1 [00:01<00:00,  1.65s/it]
+2026-07-01 15:41:45,989 - paperlens.parse - INFO - [MARKER] Recognizing tables: 100%|��������������������| 1/1 [00:01<00:00,  1.65s/it]
+2026-07-01 15:41:46,014 - paperlens.parse - INFO - [MARKER] Detecting bboxes: 0it [00:00, ?it/s]
+2026-07-01 15:41:46,014 - paperlens.parse - INFO - [MARKER] Detecting bboxes: 0it [00:00, ?it/s]
+2026-07-01 15:41:46,082 - paperlens.parse - INFO - [MARKER] 2026-07-01 15:41:46,082 [INFO] marker: Saved markdown to C:\Users\zhanke\AppData\Roaming\PaperLens\data\images\b14ceef7-f3e3-4ac5-9a3f-2d6017677403\marker\marker_temp\b14ceef7-f3e3-4ac5-9a3f-2d6017677403
+2026-07-01 15:41:46,083 - paperlens.parse - INFO - [MARKER] 2026-07-01 15:41:46,082 [INFO] marker: Total time: 41.052916288375854
+2026-07-01 15:41:48,041 - paperlens.parse - INFO - [MARKER] Completed, 20 lines of output
+2026-07-01 15:41:48,054 - paperlens.parse - INFO - [MARKER] Read 2688 chars from C:\Users\zhanke\AppData\Roaming\PaperLens\data\images\b14ceef7-f3e3-4ac5-9a3f-2d6017677403\marker\marker_temp\b14ceef7-f3e3-4ac5-9a3f-2d6017677403\b14ceef7-f3e3-4ac5-9a3f-2d6017677403.md
+2026-07-01 15:41:48,651 - paperlens.parse - INFO - [parse-marker-b14ceef7] Engine returned 2 page results
+2026-07-01 15:41:48,656 - paperlens.parse - INFO - [parse-marker-b14ceef7] Page 1/2 done (marker)
+2026-07-01 15:41:48,658 - paperlens.parse - INFO - [parse-marker-b14ceef7] Page 2/2 done (marker)
+2026-07-01 15:41:48,660 - paperlens.parse - INFO - [parse-marker-b14ceef7] === Completed: marker (2 pages) ===
+2026-07-01 15:41:48,662 - paperlens.parse - INFO - [parse-marker-b14ceef7] Thread finished, connection closed

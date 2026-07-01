@@ -27,7 +27,9 @@ interface EngineModalProps {
   selectedEngine: string
   onSelect: (engine: string) => void
   onStartParse: () => void
+  onAbortParse?: () => void
   parsing: boolean
+  parsingEngine?: string
   cachedEngines?: Record<string, number>
   totalPages?: number
   onRecheck?: () => Promise<void>
@@ -53,7 +55,9 @@ export function EngineModal({
   selectedEngine,
   onSelect,
   onStartParse,
+  onAbortParse,
   parsing,
+  parsingEngine,
   cachedEngines = {},
   totalPages = 0,
   onRecheck,
@@ -230,6 +234,8 @@ export function EngineModal({
         >
           {engines.map((engine) => {
             const isSelected = selectedEngine === engine.name
+            const isParsingThis = parsing && parsingEngine === engine.name
+            const isDisabledByParsing = parsing && !isParsingThis
             const badge = getBadge(engine)
             const engineCacheCount = cachedEngines[engine.name] || 0
             const engineHasCache = engineCacheCount >= totalPages && totalPages > 0
@@ -239,17 +245,17 @@ export function EngineModal({
             return (
               <div key={engine.name} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <div
-                  onClick={() => engine.available && onSelect(engine.name)}
+                  onClick={() => engine.available && !isDisabledByParsing && onSelect(engine.name)}
                   style={{
                     display: 'flex',
                     alignItems: 'flex-start',
                     gap: '12px',
                     padding: '14px 16px',
                     borderRadius: '10px',
-                    border: `1px solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`,
-                    background: isSelected ? 'var(--surface2)' : 'transparent',
-                    cursor: engine.available ? 'pointer' : 'default',
-                    opacity: engine.available ? 1 : 0.6,
+                    border: `1px solid ${isParsingThis ? 'var(--coral)' : isSelected ? 'var(--accent)' : 'var(--border)'}`,
+                    background: isParsingThis ? 'rgba(201,100,66,0.06)' : isSelected ? 'var(--surface2)' : 'transparent',
+                    cursor: engine.available && !isDisabledByParsing ? 'pointer' : 'default',
+                    opacity: isDisabledByParsing ? 0.5 : engine.available ? 1 : 0.6,
                     transition: 'all 0.2s',
                   }}
                 >
@@ -311,6 +317,15 @@ export function EngineModal({
                       >
                         {badge.label}
                       </span>
+                      {isParsingThis && (
+                        <span style={{
+                          fontSize: '11px', fontWeight: 500, color: 'var(--coral)',
+                          background: 'rgba(201,100,66,0.1)', padding: '1px 8px',
+                          borderRadius: '10px', border: '1px solid var(--coral)',
+                        }}>
+                          解析中
+                        </span>
+                      )}
                       {engine.version && (
                         <span
                           style={{
@@ -485,12 +500,17 @@ export function EngineModal({
             borderTop: '1px solid var(--border)',
             display: 'flex',
             justifyContent: 'flex-end',
+            alignItems: 'center',
             gap: '8px',
           }}
         >
+          {parsing && (
+            <span style={{ fontSize: 12, color: 'var(--coral)', marginRight: 'auto' }}>
+              正在使用 {parsingEngine || selectedEngine} 解析中，请先中断后切换引擎
+            </span>
+          )}
           <button
             onClick={onClose}
-            disabled={parsing}
             style={{
               padding: '8px 16px',
               background: 'var(--surface2)',
@@ -499,30 +519,48 @@ export function EngineModal({
               borderRadius: '8px',
               fontSize: '14px',
               fontWeight: 500,
-              cursor: parsing ? 'not-allowed' : 'pointer',
-              opacity: parsing ? 0.5 : 1,
+              cursor: 'pointer',
               transition: 'all 0.2s',
             }}
           >
-            取消
+            关闭
           </button>
-          <button
-            onClick={onStartParse}
-            disabled={parsing || !selectedEngine}
-            style={{
-              padding: '8px 16px',
-              background: parsing || !selectedEngine ? 'var(--border2)' : hasCache ? 'var(--success)' : 'var(--accent)',
-              color: 'var(--white)',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '14px',
-              fontWeight: 500,
-              cursor: parsing || !selectedEngine ? 'not-allowed' : 'pointer',
-              transition: 'all 0.2s',
-            }}
-          >
-            {buttonText}
-          </button>
+          {parsing && onAbortParse ? (
+            <button
+              onClick={onAbortParse}
+              style={{
+                padding: '8px 16px',
+                background: 'var(--error)',
+                color: 'var(--white)',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: 500,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}
+            >
+              中断解析
+            </button>
+          ) : (
+            <button
+              onClick={onStartParse}
+              disabled={!selectedEngine}
+              style={{
+                padding: '8px 16px',
+                background: !selectedEngine ? 'var(--border2)' : hasCache ? 'var(--success)' : 'var(--accent)',
+                color: 'var(--white)',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: 500,
+                cursor: !selectedEngine ? 'default' : 'pointer',
+                transition: 'all 0.2s',
+              }}
+            >
+              {buttonText}
+            </button>
+          )}
         </div>
       </div>
 

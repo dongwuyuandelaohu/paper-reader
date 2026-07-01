@@ -69,8 +69,13 @@ class MarkerEngine:
 
         return None
 
-    def parse_all(self, pdf_path: str, paper_id: str = "") -> list[dict]:
-        """解析全部页面"""
+    def parse_all(self, pdf_path: str, paper_id: str = "", log_callback=None, register_process=None) -> list[dict]:
+        """解析全部页面
+
+        Args:
+            log_callback: 可选回调函数，接收每行 stdout/stderr 输出
+            register_process: 可选回调函数，接收 Popen 对象用于中止
+        """
         if not self.output_dir:
             raise ValueError("Marker 引擎需要指定输出目录")
 
@@ -91,25 +96,69 @@ class MarkerEngine:
                 "--output_dir", str(temp_output),
                 "--output_format", "markdown",
             ]
-            
-            # PyInstaller 打包的 exe 多进程容易出问题，强制单进程；venv 版本保持默认
-            if marker_cmd.lower().endswith(".exe") and "--disable_multiprocessing" not in cmd:
+
+            # 强制单进程（CPU 环境下多进程反而慢）
+            if "--disable_multiprocessing" not in cmd:
                 cmd.append("--disable_multiprocessing")
-            
-            # 仅对 PyInstaller 版本添加分页输出（如果支持）
-            if marker_cmd.lower().endswith(".exe") and "--paginate_output" not in cmd:
+
+            # 分页输出（支持按页拆分）
+            if "--paginate_output" not in cmd:
                 cmd.append("--paginate_output")
+
+            # 设置正确的环境变量
+            # 注意：.bat 脚本内部会 set HF_HOME=%HF_PROFILE%\huggingface
+            # 由于批处理变量在 if-else 块内是解析时展开的，必须设置 HF_PROFILE 而非 HF_HOME
+            env = os.environ.copy()
+            cache_dir = Path.home() / ".cache" / "paperlens"
+            env["HF_PROFILE"] = str(cache_dir)
+            env["HF_ENDPOINT"] = "https://hf-mirror.com"
+            # .bat 脚本用 MODEL_CACHE_DIR（不是 DATALAB_CACHE）
+            if "MODEL_CACHE_DIR" not in env:
+                env["MODEL_CACHE_DIR"] = str(cache_dir / "datalab-models")
+            logger.info(f"[MARKER] HF_PROFILE: {env['HF_PROFILE']} (期望 HF_HOME={cache_dir}/huggingface)")
+            logger.info(f"[MARKER] MODEL_CACHE_DIR: {env['MODEL_CACHE_DIR']}")
 
             logger.info(f"[MARKER] Command: {' '.join(cmd)}")
             # .bat files on Windows need shell=True
             use_shell = marker_cmd.lower().endswith(".bat")
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800, shell=use_shell)
 
-            if result.returncode != 0:
-                logger.error(f"[MARKER] Failed: {result.stderr}")
-                raise RuntimeError(f"Marker 执行失败: {result.stderr}")
+            # 使用 Popen 逐行读取输出，支持实时日志推送
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                shell=use_shell,
+                bufsize=1,
+                encoding='utf-8',
+                errors='replace',
+                env=env,
+            )
 
-            logger.info(f"[MARKER] STDOUT: {result.stdout[:500]}")
+            # 注册进程对象，用于中止时 kill
+            if register_process:
+                register_process(proc)
+
+            stdout_lines = []
+            try:
+                for line in proc.stdout:
+                    line = line.rstrip('\n\r')
+                    if line:
+                        stdout_lines.append(line)
+                        logger.info(f"[MARKER] {line}")
+                        if log_callback:
+                            log_callback(line)
+                proc.wait(timeout=1800)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                raise RuntimeError("Marker 执行超时（30分钟）")
+
+            if proc.returncode != 0:
+                error_output = '\n'.join(stdout_lines[-50:])
+                logger.error(f"[MARKER] Failed (code {proc.returncode}): {error_output}")
+                raise RuntimeError(f"Marker 执行失败 (code {proc.returncode}): {error_output}")
+
+            logger.info(f"[MARKER] Completed, {len(stdout_lines)} lines of output")
 
             # 查找输出目录
             paper_stem = Path(pdf_path).stem

@@ -3,6 +3,7 @@ MinerU 解析引擎
 优先使用独立打包的引擎，回退到系统安装的 mineru
 """
 
+import os
 import json
 import re
 import shutil
@@ -68,8 +69,13 @@ class MinerUEngine:
 
         return None
 
-    def parse_all(self, pdf_path: str, paper_id: str = "") -> list[dict]:
-        """解析全部页面"""
+    def parse_all(self, pdf_path: str, paper_id: str = "", log_callback=None, register_process=None) -> list[dict]:
+        """解析全部页面
+
+        Args:
+            log_callback: 可选回调函数，接收每行 stdout/stderr 输出
+            register_process: 可选回调函数，接收 Popen 对象用于中止
+        """
         if not self.output_dir:
             raise ValueError("MinerU 引擎需要指定输出目录")
 
@@ -102,16 +108,53 @@ class MinerUEngine:
             logger.info(f"[MINERU] Running: {' '.join(cmd)}")
             # .bat files on Windows need shell=True
             use_shell = mineru_cmd.lower().endswith(".bat")
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800, shell=use_shell)
 
-            if result.returncode != 0:
-                logger.error(f"[MINERU] Failed (code {result.returncode})")
-                logger.error(f"[MINERU] STDERR: {result.stderr[:2000]}")
-                logger.error(f"[MINERU] STDOUT: {result.stdout[:2000]}")
-                raise RuntimeError(f"MinerU 执行失败 (code {result.returncode}): {result.stderr[:2000]}")
+            # 设置正确的环境变量
+            env = os.environ.copy()
+            cache_dir = Path.home() / ".cache" / "paperlens"
+            env["HF_HOME"] = str(cache_dir / "huggingface")
+            env["HF_ENDPOINT"] = "https://hf-mirror.com"
+            env["MINERU_MODEL_CACHE_DIR"] = str(cache_dir / "mineru-models")
+            logger.info(f"[MINERU] HF_HOME: {env['HF_HOME']}")
 
-            logger.info(f"[MINERU] Success")
-            logger.info(f"[MINERU] STDOUT: {result.stdout[:500]}")
+            # 使用 Popen 逐行读取输出，支持实时日志推送
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                shell=use_shell,
+                bufsize=1,
+                encoding='utf-8',
+                errors='replace',
+                env=env,
+            )
+
+            # 注册进程对象，用于中止时 kill
+            if register_process:
+                register_process(proc)
+
+            stdout_lines = []
+            try:
+                for line in proc.stdout:
+                    line = line.rstrip('\n\r')
+                    if line:
+                        stdout_lines.append(line)
+                        logger.info(f"[MINERU] {line}")
+                        if log_callback:
+                            log_callback(line)
+                proc.wait(timeout=1800)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                raise RuntimeError("MinerU 执行超时（30分钟）")
+
+            if proc.returncode != 0:
+                error_output = '\n'.join(stdout_lines[-50:])
+                logger.error(f"[MINERU] Failed (code {proc.returncode})")
+                logger.error(f"[MINERU] Output: {error_output}")
+                raise RuntimeError(f"MinerU 执行失败 (code {proc.returncode}): {error_output}")
+
+            logger.info(f"[MINERU] Success, {len(stdout_lines)} lines of output")
 
             # 查找输出目录
             paper_stem = Path(pdf_path).stem

@@ -40,8 +40,13 @@ class PyMuPDFEngine:
         doc.close()
         return result
 
-    def parse_all(self, pdf_path: str, paper_id: str = "") -> list[dict]:
-        """解析全部页面"""
+    def parse_all(self, pdf_path: str, paper_id: str = "", log_callback=None, register_process=None) -> list[dict]:
+        """解析全部页面
+
+        Args:
+            log_callback: 可选回调函数（PyMuPDF 原生解析较快，日志较少）
+            register_process: 可选回调函数（PyMuPDF 不使用子进程，无需注册）
+        """
         doc = fitz.open(pdf_path)
         total_pages = len(doc)
         results = []

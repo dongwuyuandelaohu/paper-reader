@@ -120,6 +120,8 @@ export const parse = {
       method: 'POST',
       body: JSON.stringify({ engine }),
     }),
+  abort: (paperId: string) =>
+    request<{ status: string; engine?: string }>(`/parse/${paperId}/parse/abort`, { method: 'POST' }),
   status: (paperId: string, engine?: string) => {
     const params = engine ? `?engine=${encodeURIComponent(engine)}` : ''
     return request<ParseStatus>(`/parse/${paperId}/parse/status${params}`)
